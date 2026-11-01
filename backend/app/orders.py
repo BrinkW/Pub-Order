@@ -26,6 +26,7 @@ router = APIRouter()
 ORDER_COLUMNS = "id,status,swipes,created_at,order_items(menu_item_id,name,swipe_type,quantity,customization)"
 TYPE_ORDER = ["Entry", "Side", "Drink"]
 INVALID_ORDER = "22023"  # errcode raised by place_order() for a meal it won't accept
+WRONG_STATE = "55000"  # errcode for a cancel that is too late, or a status change to a cancelled order
 
 
 class PlaceOrderRequest(CheckoutRequest):
@@ -187,6 +188,33 @@ def read_order(
     return saved
 
 
+@router.post("/orders/{order_id}/cancel")
+def cancel_order(
+    order_id: UUID,
+    user=Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+):
+    """Cancel one of the signed-in student's orders while the kitchen hasn't started it (US23).
+
+    The database function checks ownership and status in one update, so this route can't
+    cancel someone else's order or race with a kitchen status change."""
+    db = user_client(access_token(credentials))
+    try:
+        db.rpc("cancel_order", {"p_order_id": str(order_id)}).execute()
+        saved = fetch_order(db, str(order_id))
+    except APIError as exc:
+        if exc.code == "P0002":
+            raise HTTPException(404, "Order not found.") from exc
+        if exc.code == WRONG_STATE:
+            raise HTTPException(409, "The kitchen has already started this order, so it can't be cancelled.") from exc
+        raise HTTPException(503, "Could not cancel this order. Please try again.") from exc
+    except Exception as exc:
+        raise HTTPException(503, "Could not cancel this order. Please try again.") from exc
+    if saved is None:
+        raise HTTPException(404, "Order not found.")
+    return saved
+
+
 @router.patch("/orders/{order_id}")
 def update_order_status(
     order_id: UUID,
@@ -208,6 +236,8 @@ def update_order_status(
             raise HTTPException(404, "Order not found.") from exc
         if exc.code == "22023":
             raise HTTPException(422, "That status is not allowed.") from exc
+        if exc.code == WRONG_STATE:
+            raise HTTPException(409, "This order was cancelled by the student.") from exc
         raise HTTPException(503, "Could not update this order. Please try again.") from exc
     except HTTPException:
         raise

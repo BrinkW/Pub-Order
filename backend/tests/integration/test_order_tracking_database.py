@@ -108,7 +108,7 @@ def test_student_cannot_change_their_own_order_status(admin, student, order):
 
 
 def test_database_rejects_an_unknown_status(admin, order):
-    """US6: the tracker only ever has to draw the four known statuses."""
+    """US6: the tracker only ever has to draw the known statuses."""
     with pytest.raises(APIError):
         admin.table("orders").update({"status": "Lost"}).eq("id", order["id"]).execute()
 
@@ -118,3 +118,34 @@ def test_database_rejects_an_unknown_status(admin, order):
 def test_guest_cannot_track_an_order(client, order):
     assert client.get(f"/orders/{order['id']}").status_code == 401
     assert client.get("/orders").status_code == 401
+
+
+def test_student_cancels_a_received_order(client, admin, student, order):
+    """US23: cancelling stores Cancelled; repeating the request is harmless."""
+    url = f"/orders/{order['id']}/cancel"
+
+    first = client.post(url, headers=headers(student[0]))
+    again = client.post(url, headers=headers(student[0]))
+
+    assert first.status_code == 200
+    assert first.json()["status"] == "Cancelled"
+    assert again.status_code == 200
+    assert stored_status(admin, order["id"]) == "Cancelled"
+
+
+def test_another_student_cannot_cancel_the_order(client, admin, other_student, order):
+    """US23 failure path: changing the id in the URL cannot cancel someone else's order."""
+    response = client.post(f"/orders/{order['id']}/cancel", headers=headers(other_student[0]))
+
+    assert response.status_code == 404
+    assert stored_status(admin, order["id"]) == "Received"
+
+
+def test_cancel_is_refused_once_the_kitchen_starts(client, admin, student, order):
+    """US23 failure path: an order the kitchen is preparing stays in the queue."""
+    admin.table("orders").update({"status": "Preparing"}).eq("id", order["id"]).execute()
+
+    response = client.post(f"/orders/{order['id']}/cancel", headers=headers(student[0]))
+
+    assert response.status_code == 409
+    assert stored_status(admin, order["id"]) == "Preparing"
