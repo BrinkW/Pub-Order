@@ -119,6 +119,18 @@ Covers `POST /orders`, `GET /orders` and `GET /orders/{id}` in [app/orders.py](.
 | [`test_guest_cannot_read_orders`](../backend/tests/test_orders.py#L252) ×2 | Reading orders without a token gives 401. |
 | [`test_read_failures_are_sanitized`](../backend/tests/test_orders.py#L260) ×2 | Read errors give 503 without leaking details. |
 
+### Cancelling an order: [test_cancel_order.py](../backend/tests/test_cancel_order.py)
+
+Covers `POST /orders/{id}/cancel` in [app/orders.py](../backend/app/orders.py) (US23), with a fake database client. The ownership and status rules are in the `cancel_order` database function, covered by the integration tests.
+
+| Test | What it checks |
+|---|---|
+| [`test_student_can_cancel_their_order`](../backend/tests/test_cancel_order.py#L15) | Calls `cancel_order` with the order id and returns the cancelled order. |
+| [`test_cancel_errors_are_mapped`](../backend/tests/test_cancel_order.py#L33) ×3 | Not found (or not yours) gives 404, already started gives 409, anything else gives 503, without database details. |
+| [`test_cancel_requires_a_token`](../backend/tests/test_cancel_order.py#L42) | Without a token the request gets 401 and nothing reaches the database. |
+| [`test_cancel_rejects_a_malformed_order_id`](../backend/tests/test_cancel_order.py#L49) | A malformed id gives 422. |
+| [`test_kitchen_cannot_reopen_a_cancelled_order`](../backend/tests/test_cancel_order.py#L56) | A kitchen status change to a cancelled order gives 409. |
+
 ### Settings: [test_config.py](../backend/tests/test_config.py)
 
 Covers `get_settings` and `Settings` in [app/config.py](../backend/app/config.py).
@@ -190,6 +202,9 @@ Marked `integration`. No mocks: reads go through FastAPI, real auth and `app/ord
 | [`test_student_cannot_change_their_own_order_status`](../backend/tests/integration/test_order_tracking_database.py#L102) | **Failure path:** the database refuses a student's own token updating the status, and it stays Received. |
 | [`test_database_rejects_an_unknown_status`](../backend/tests/integration/test_order_tracking_database.py#L110) | **Failure path:** the database refuses a status outside Received, Preparing, Ready, Collected. |
 | [`test_guest_cannot_track_an_order`](../backend/tests/integration/test_order_tracking_database.py#L118) | **Failure path:** reading one order or the list without a token gives 401. |
+| [`test_student_cancels_a_received_order`](../backend/tests/integration/test_order_tracking_database.py#L123) | **US23, stored result:** cancelling stores Cancelled; cancelling again still succeeds. |
+| [`test_another_student_cannot_cancel_the_order`](../backend/tests/integration/test_order_tracking_database.py#L136) | **US23 failure path:** a second student gets 404 and the order stays Received. |
+| [`test_cancel_is_refused_once_the_kitchen_starts`](../backend/tests/integration/test_order_tracking_database.py#L144) | **US23 failure path:** once the order is Preparing, cancelling gives 409 and the status is unchanged. |
 
 ### Integration: real sign-in: [integration/test_supabase_auth.py](../backend/tests/integration/test_supabase_auth.py)
 
@@ -414,7 +429,8 @@ Covers [order-status.js](../frontend/src/order-status.js), the rules shared by t
 | [statusSteps](../frontend/src/order-status.test.js#L14) ×4 | Each of the four steps is marked done, current or upcoming; Collected shows the whole journey done; Ready is labelled "Ready for pickup"; the order matches the database's allowed statuses. |
 | [status wording](../frontend/src/order-status.test.js#L32) ×3 | Every status has a title and a next step; an unknown status falls back to its raw value; "meal swipe(s)" is pluralized. |
 | [order ids](../frontend/src/order-status.test.js#L52) ×2 | Only UUIDs count as order ids, so a mistyped link never reaches the API; the counter number is the first 8 characters in capitals. |
-| [isOpenOrder](../frontend/src/order-status.test.js#L65) | Every status except Collected keeps the page checking for updates. |
+| [isOpenOrder](../frontend/src/order-status.test.js#L65) | Every status except Collected and Cancelled keeps the page checking for updates. |
+| [canCancel](../frontend/src/order-status.test.js#L74) | Only a Received order offers Cancel (US23). |
 | [isOrder](../frontend/src/order-status.test.js#L73) ×7 | A response shaped like the API's order is accepted; a missing body, bad id, unknown status, zero swipes or bad items are rejected. |
 | [formatPlacedAt](../frontend/src/order-status.test.js#L90) ×3 | "today at …" for today's orders, the date for older ones, nothing for an unreadable time. |
 
@@ -435,6 +451,9 @@ Covers [order-api.js](../frontend/src/order-api.js) (US4, US6). Supabase and `fe
 | [lists the student's orders](../frontend/src/order-api.test.js#L78) | `GET /api/orders` returns the list. |
 | [asks a guest or an expired session to sign in](../frontend/src/order-api.test.js#L84) | No session or a 401 asks for sign-in. |
 | [throws when the server fails or sends something that is not a list of orders](../frontend/src/order-api.test.js#L91) | A server error or a malformed list throws a friendly error. |
+| [posts the cancel with the login token](../frontend/src/order-api.test.js#L100) | **US23:** `POST /api/orders/{id}/cancel` carries `Bearer <token>` and returns the cancelled order. |
+| [reports a %i without throwing](../frontend/src/order-api.test.js#L112) ×3 | 401 asks for sign-in, 404 is not found, 409 means the kitchen already started. |
+| [throws a friendly error when the server fails](../frontend/src/order-api.test.js#L118) | A 503 becomes "Could not cancel this order. Please try again." |
 
 ### Order confirmation and pickup tracking: [OrderPage.test.jsx](../frontend/src/OrderPage.test.jsx)
 
@@ -458,6 +477,10 @@ Covers [OrderPage.jsx](../frontend/src/OrderPage.jsx) (US4, US6). The API module
 | [keeps the last status on screen when a refresh fails](../frontend/src/OrderPage.test.jsx#L193) | **Failure path:** a failed refresh keeps the last status and says it may be out of date. |
 | [shows the not-found page if the order disappears while open](../frontend/src/OrderPage.test.jsx#L205) | A 404 on refresh switches to not found. |
 | [ignores an older response that arrives after a newer one](../frontend/src/OrderPage.test.jsx#L215) | A slow, older response can't overwrite a newer status. |
+| [cancels a Received order after the student confirms](../frontend/src/OrderPage.test.jsx#L234) | **US23:** **Cancel order** asks to confirm, then shows Cancelled without the progress steps or the button. |
+| [does nothing when the student changes their mind](../frontend/src/OrderPage.test.jsx#L246) | Dismissing the confirmation sends nothing. |
+| [explains when the kitchen started first and shows the new status](../frontend/src/OrderPage.test.jsx#L255) | **US23 failure path:** a 409 explains why and shows the latest status. |
+| [offers no cancel once the kitchen has started](../frontend/src/OrderPage.test.jsx#L268) | A Preparing order has no **Cancel order** button. |
 
 ### My orders: [MyOrders.test.jsx](../frontend/src/MyOrders.test.jsx)
 
