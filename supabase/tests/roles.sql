@@ -79,4 +79,31 @@ begin
   end;
 end $$;
 
+-- US23: a student cancels a new order; the kitchen can neither reopen nor cancel it.
+select set_config('request.jwt.claims', '{"sub": "00000000-0000-4000-8000-00000000000a", "role": "authenticated"}', true);
+do $$
+begin
+  perform public.cancel_order(public.place_order(
+    '00000000-0000-4000-8000-000000000011', 1,
+    '[{"id": "pub-burger", "quantity": 1}, {"id": "straight-cut-fries", "quantity": 1}, {"id": "sweet-tea", "quantity": 1}]'
+  ));
+end $$;
+
+select set_config('request.jwt.claims', '{"sub": "00000000-0000-4000-8000-00000000000c", "role": "authenticated"}', true);
+do $$
+declare
+  v_order uuid := (select id from public.orders where status = 'Cancelled');
+begin
+  begin
+    perform public.set_order_status(v_order, 'Preparing');
+    raise exception 'Kitchen reopened a cancelled order';
+  exception when object_not_in_prerequisite_state then null;
+  end;
+  begin
+    perform public.cancel_order((select id from public.orders where status = 'Ready'));
+    raise exception 'Kitchen cancelled a student''s order';
+  exception when no_data_found then null;
+  end;
+end $$;
+
 rollback;
