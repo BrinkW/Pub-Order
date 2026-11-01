@@ -3,9 +3,10 @@
 // later) shows the stored order and its latest status, never a copy kept in the browser.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import PubHeader from './PubHeader.jsx';
-import { loadOrder } from './order-api.js';
+import { cancelOrder, loadOrder } from './order-api.js';
 import {
-  STATUS_POLL_MS, formatPlacedAt, isOpenOrder, shortOrderId, statusMessage, statusSteps, stepLabel, swipeLabel,
+  CANCELLED, STATUS_POLL_MS, canCancel, formatPlacedAt, isOpenOrder, shortOrderId, statusMessage, statusSteps,
+  stepLabel, swipeLabel,
 } from './order-status.js';
 
 export default function OrderPage({ orderId, initialOrder, justPlaced, email, onBackToMenu, onViewOrders, onSignIn }) {
@@ -16,6 +17,8 @@ export default function OrderPage({ orderId, initialOrder, justPlaced, email, on
   const [refreshing, setRefreshing] = useState(false);
   const [checkedAt, setCheckedAt] = useState(null);
   const [announcement, setAnnouncement] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState('');
   const latestRequest = useRef(0);
   const lastStatus = useRef(startingOrder?.status ?? null);
   const controller = useRef(null);
@@ -77,6 +80,29 @@ export default function OrderPage({ orderId, initialOrder, justPlaced, email, on
 
   useEffect(() => { if (state !== 'loading') heading.current?.focus(); }, [state]);
 
+  async function cancel() {
+    if (!window.confirm('Cancel this order? The kitchen will not make it.')) return;
+    setCancelling(true);
+    setCancelError('');
+    try {
+      const result = await cancelOrder(orderId);
+      if (result.signInRequired) { setState('signIn'); return; }
+      if (result.notFound) { setOrder(null); setState('notFound'); return; }
+      if (result.tooLate) {
+        setCancelError('The kitchen has already started this order, so it can’t be cancelled.');
+        await refresh({ quiet: true });
+        return;
+      }
+      lastStatus.current = result.order.status;
+      setOrder(result.order);
+      setAnnouncement('Your order was cancelled.');
+    } catch (failure) {
+      setCancelError(failure.message);
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   return (
     <div className="menu-page order-page">
       <PubHeader email={email}>
@@ -110,6 +136,7 @@ export default function OrderPage({ orderId, initialOrder, justPlaced, email, on
         {state === 'ready' && order && <OrderDetails
           order={order} justPlaced={justPlaced} heading={heading} error={error} checkedAt={checkedAt}
           refreshing={refreshing} onRefresh={() => refresh()} onBackToMenu={onBackToMenu} onViewOrders={onViewOrders}
+          cancelling={cancelling} cancelError={cancelError} onCancel={cancel}
         />}
 
         <p className="visually-hidden" role="status" aria-live="polite">{announcement}</p>
@@ -118,7 +145,10 @@ export default function OrderPage({ orderId, initialOrder, justPlaced, email, on
   );
 }
 
-function OrderDetails({ order, justPlaced, heading, error, checkedAt, refreshing, onRefresh, onBackToMenu, onViewOrders }) {
+function OrderDetails({
+  order, justPlaced, heading, error, checkedAt, refreshing, onRefresh, onBackToMenu, onViewOrders,
+  cancelling, cancelError, onCancel,
+}) {
   const message = statusMessage(order.status);
   const number = shortOrderId(order.id);
   return <>
@@ -133,7 +163,7 @@ function OrderDetails({ order, justPlaced, heading, error, checkedAt, refreshing
         <p className="order-status-label">Pickup status</p>
         <h2 id="order-status-title">{message.title}</h2>
         <p className="order-status-detail">{message.detail}</p>
-        <ol className="order-steps" aria-label="Order progress">
+        {order.status !== CANCELLED && <ol className="order-steps" aria-label="Order progress">
           {statusSteps(order.status).map((step) => (
             <li key={step.status} className={`order-step order-step-${step.state}`} aria-current={step.state === 'current' ? 'step' : undefined}>
               <span className="order-step-dot" aria-hidden="true" />
@@ -141,7 +171,7 @@ function OrderDetails({ order, justPlaced, heading, error, checkedAt, refreshing
               <span className="visually-hidden">{step.state === 'done' ? ' (done)' : step.state === 'current' ? ' (current)' : ''}</span>
             </li>
           ))}
-        </ol>
+        </ol>}
         <div className="order-status-meta">
           <span>{checkedAt ? `Checked ${checkedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}` : 'Checking for updates…'}{isOpenOrder(order) ? ' · updates automatically' : ''}</span>
           <button className="order-refresh" disabled={refreshing} onClick={onRefresh}>{refreshing ? 'Refreshing…' : 'Refresh status'}</button>
@@ -163,9 +193,13 @@ function OrderDetails({ order, justPlaced, heading, error, checkedAt, refreshing
       </section>
     </div>
 
+    {cancelError && <p className="order-refresh-error" role="alert">{cancelError}</p>}
     <div className="order-actions">
       <button className="menu-add" onClick={onBackToMenu}>Order something else</button>
       <button className="menu-text-button" onClick={onViewOrders}>View all my orders</button>
+      {canCancel(order) && <button className="menu-text-button" disabled={cancelling} onClick={onCancel}>
+        {cancelling ? 'Cancelling…' : 'Cancel order'}
+      </button>}
     </div>
   </>;
 }

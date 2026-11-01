@@ -44,6 +44,26 @@ export async function loadOrders(signal) {
   return { orders };
 }
 
+const CANCEL_FAILED = 'Could not cancel this order. Please try again.';
+
+// US23. Returns { order }, { signInRequired }, { notFound } or { tooLate } (the kitchen has
+// already started it). Throws when the request fails.
+export async function cancelOrder(orderId) {
+  const token = await accessToken();
+  if (!token) return { signInRequired: true };
+  const response = await fetch(`/api/orders/${orderId}/cancel`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (response.status === 401) return { signInRequired: true };
+  if (response.status === 404) return { notFound: true };
+  if (response.status === 409) return { tooLate: true };
+  if (!response.ok) throw new Error(CANCEL_FAILED);
+  const order = await response.json().catch(() => null);
+  if (!isOrder(order) || order.id !== orderId) throw new Error(CANCEL_FAILED);
+  return { order };
+}
+
 const UPDATE_FAILED = 'Could not update this order. Please try again.';
 
 // Kitchen staff only. Returns { order }, { signInRequired }, { forbidden } or { notFound }.

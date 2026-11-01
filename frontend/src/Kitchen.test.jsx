@@ -48,6 +48,16 @@ describe('Kitchen orders', () => {
     expect(await screen.findByRole('button', { name: 'Preparing' })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('moves a cancelled order out of the open queue with no status buttons (US23)', async () => {
+    loadOrders.mockResolvedValue({ orders: [{ ...order, status: 'Cancelled' }] });
+    render(<Kitchen email="kitchen@puborder.test" onSignOut={vi.fn()} />);
+
+    expect(await screen.findByRole('heading', { name: 'Closed' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Open' })).not.toBeInTheDocument();
+    expect(screen.getByText('Cancelled')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Preparing' })).not.toBeInTheDocument();
+  });
+
   it('tells a student account it cannot change status', async () => {
     loadOrders.mockResolvedValue({ orders: [order] });
     updateOrderStatus.mockResolvedValue({ forbidden: true });

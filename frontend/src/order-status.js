@@ -1,6 +1,8 @@
 // Order status rules shared by the confirmation page (US4), pickup tracking (US6) and the
-// order list. The backend only ever stores one of these four values, in this order.
+// order list. An order moves through these four steps in order, unless the student cancels
+// it while it is still Received (US23).
 export const ORDER_STATUSES = ['Received', 'Preparing', 'Ready', 'Collected'];
+export const CANCELLED = 'Cancelled';
 
 // How often an open order page checks for a newer status. Collected orders stop checking.
 export const STATUS_POLL_MS = 15000;
@@ -12,6 +14,7 @@ const STEP_LABELS = {
   Preparing: 'Preparing',
   Ready: 'Ready for pickup',
   Collected: 'Picked up',
+  Cancelled: 'Cancelled',
 };
 
 const MESSAGES = {
@@ -19,6 +22,7 @@ const MESSAGES = {
   Preparing: { title: 'Being prepared', detail: 'The kitchen is making your order now. We will show it here as soon as it is ready.' },
   Ready: { title: 'Ready for pickup', detail: 'Head to the Pub counter and give them your order number.' },
   Collected: { title: 'Picked up', detail: 'This order has been collected. Enjoy your meal!' },
+  Cancelled: { title: 'Cancelled', detail: 'You cancelled this order, so the kitchen will not make it.' },
 };
 
 export function isOrderId(value) {
@@ -48,9 +52,14 @@ export function statusSteps(status) {
   }));
 }
 
-// An order still needs live updates until it has been picked up.
+// An order still needs live updates until it has been picked up or cancelled.
 export function isOpenOrder(order) {
-  return Boolean(order) && order.status !== 'Collected';
+  return Boolean(order) && order.status !== 'Collected' && order.status !== CANCELLED;
+}
+
+// Students can cancel only until the kitchen starts the order. The server enforces this too.
+export function canCancel(order) {
+  return order?.status === 'Received';
 }
 
 export function swipeLabel(swipes) {
@@ -68,7 +77,8 @@ export function formatPlacedAt(createdAt, now = new Date()) {
 // Rejects anything that is not an order the API would send, so a bad response shows the
 // error state instead of a half-drawn page.
 export function isOrder(value) {
-  return Boolean(value) && isOrderId(value.id) && ORDER_STATUSES.includes(value.status) &&
+  return Boolean(value) && isOrderId(value.id) &&
+    (ORDER_STATUSES.includes(value.status) || value.status === CANCELLED) &&
     Number.isInteger(value.swipes) && value.swipes > 0 && Array.isArray(value.items) &&
     value.items.every((item) => item && typeof item.name === 'string' && Number.isInteger(item.quantity));
 }

@@ -1,6 +1,6 @@
 // Unit tests for reading saved orders from the API (US4, US6). Supabase and fetch are faked.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { loadOrder, loadOrders, updateOrderStatus } from './order-api.js';
+import { cancelOrder, loadOrder, loadOrders, updateOrderStatus } from './order-api.js';
 import { getSupabase } from './supabase.js';
 
 vi.mock('./supabase.js', () => ({ getSupabase: vi.fn() }));
@@ -93,6 +93,31 @@ describe('loadOrders', () => {
     await expect(loadOrders()).rejects.toThrow('Could not load your orders. Please try again.');
     fetch.mockResolvedValueOnce(response([{ id: 'nope' }]));
     await expect(loadOrders()).rejects.toThrow('Could not load your orders');
+  });
+});
+
+describe('cancelOrder', () => {
+  it('posts the cancel with the login token', async () => {
+    fetch.mockResolvedValueOnce(response({ ...order, status: 'Cancelled' }));
+
+    await expect(cancelOrder(ID)).resolves.toEqual({ order: { ...order, status: 'Cancelled' } });
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe(`/api/orders/${ID}/cancel`);
+    expect(options.method).toBe('POST');
+    expect(options.headers.Authorization).toBe('Bearer test-token');
+  });
+
+  it.each([[401, { signInRequired: true }], [404, { notFound: true }], [409, { tooLate: true }]])(
+    'reports a %i without throwing', async (status, expected) => {
+      fetch.mockResolvedValueOnce(response({ detail: 'no' }, status));
+      await expect(cancelOrder(ID)).resolves.toEqual(expected);
+    },
+  );
+
+  it('throws a friendly error when the server fails', async () => {
+    fetch.mockResolvedValueOnce(response({ detail: 'down' }, 503));
+    await expect(cancelOrder(ID)).rejects.toThrow('Could not cancel this order. Please try again.');
   });
 });
 
