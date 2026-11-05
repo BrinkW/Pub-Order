@@ -51,10 +51,15 @@ def apply_role_discount(total, user):
     return total
 
 
+BULK_MIN_QTY = 5
+BULK_DISCOUNT = 5.0
+WAITLIST_FEE = 2.0
+
+
 def bulk_discount(total, quantity, event_type):
     """Flat $5 off orders of 5 or more tickets, except workshops."""
-    if quantity >= 5 and event_type != "workshop":
-        return total - 5.0
+    if quantity >= BULK_MIN_QTY and event_type != "workshop":
+        return total - BULK_DISCOUNT
     return total
 
 
@@ -98,7 +103,7 @@ def calc(t, q, u, d, c=None, w=False):
     total = bulk_discount(total, q, t)
     total = apply_coupon(total, c, t, u)
     if w:
-        total = total + 2.0
+        total = total + WAITLIST_FEE
     if total < 0:
         total = 0.0
     return round(total + service_fee(total), 2)
