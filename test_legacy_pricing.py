@@ -85,3 +85,17 @@ def test_bad_coupon():
 def test_fee_bands():
     assert calc("workshop", 3, None, 2) == 92.5     # 90 + 2.5
     assert calc("workshop", 4, None, 2) == 125.0    # 120 + 5
+
+
+def test_fee_band_edges():
+    assert calc("lecture", 4, None, 2) == 22.5    # total exactly 20 -> fee 2.5, not 1
+    assert calc("concert", 4, None, 5) == 105.0   # total exactly 100 -> fee 5, not 2.5
+
+
+def test_waitlist_fee_counts_toward_fee_band():
+    assert calc("lecture", 3, None, 2, w=True) == 18.0   # 15 + 2 = 17 -> fee 1
+
+
+def test_quantity_error_wins_over_bad_coupon():
+    with pytest.raises(ValueError, match="bad qty"):
+        calc("concert", 0, None, 2, c="BAD")
