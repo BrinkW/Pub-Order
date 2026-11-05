@@ -58,6 +58,22 @@ def bulk_discount(total, quantity, event_type):
     return total
 
 
+def apply_coupon(total, coupon, event_type, user):
+    """Apply a coupon code. Unknown codes raise ValueError.
+
+    WELCOME10 without a first purchase and HALFOFF on a non-lecture are accepted but change
+    nothing, and FREEDRINK never changes the price (pinned by tests; see REFACTOR_NOTES.md).
+    """
+    if coupon is None or coupon == "FREEDRINK":
+        return total
+    if coupon == "WELCOME10":
+        first_purchase = user is not None and user.get("first_purchase")
+        return total * 0.9 if first_purchase else total
+    if coupon == "HALFOFF":
+        return total * 0.5 if event_type == "lecture" else total
+    raise ValueError("bad coupon")
+
+
 def calc(t, q, u, d, c=None, w=False):
     # t = event type, q = quantity, u = user dict, d = day of week (0=Mon..6=Sun),
     # c = coupon code, w = waitlist
@@ -66,17 +82,7 @@ def calc(t, q, u, d, c=None, w=False):
     total = p * q
     total = apply_role_discount(total, u)
     total = bulk_discount(total, q, t)
-    if c is not None:
-        if c == "WELCOME10":
-            if u is not None and u.get("first_purchase"):
-                total = total * 0.9
-        elif c == "HALFOFF":
-            if t == "lecture":
-                total = total * 0.5
-        elif c == "FREEDRINK":
-            pass
-        else:
-            raise ValueError("bad coupon")
+    total = apply_coupon(total, c, t, u)
     if w:
         total = total + 2.0
     if total < 0:
