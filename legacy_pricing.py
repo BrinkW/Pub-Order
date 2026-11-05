@@ -74,6 +74,20 @@ def apply_coupon(total, coupon, event_type, user):
     raise ValueError("bad coupon")
 
 
+FEE_BANDS = [(20, 1.0), (100, 2.5)]  # (order total below this, fee)
+TOP_FEE = 5.0
+
+
+def service_fee(total):
+    """Fee by order total: under 20 pays 1.0, under 100 pays 2.5, anything else 5.0."""
+    if total <= 0:
+        return 0.0
+    for limit, fee in FEE_BANDS:
+        if total < limit:
+            return fee
+    return TOP_FEE
+
+
 def calc(t, q, u, d, c=None, w=False):
     # t = event type, q = quantity, u = user dict, d = day of week (0=Mon..6=Sun),
     # c = coupon code, w = waitlist
@@ -87,12 +101,4 @@ def calc(t, q, u, d, c=None, w=False):
         total = total + 2.0
     if total < 0:
         total = 0.0
-    fee = 0.0
-    if total > 0:
-        if total < 20:
-            fee = 1.0
-        elif total < 100:
-            fee = 2.5
-        else:
-            fee = 5.0
-    return round(total + fee, 2)
+    return round(total + service_fee(total), 2)
