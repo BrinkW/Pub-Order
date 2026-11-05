@@ -33,25 +33,31 @@ def validate_quantity(quantity):
         raise ValueError("too many")
 
 
+def apply_role_discount(total, user):
+    """Apply the legacy role multiplier without changing undiscounted totals."""
+    if user is not None:
+        if user.get("role") == "student":
+            if user.get("verified"):
+                total = total * 0.8
+            else:
+                total = total * 0.9
+        elif user.get("role") == "staff":
+            total = total * 0.85
+        elif user.get("role") == "alumni":
+            if user.get("years", 0) >= 10:
+                total = total * 0.85
+            else:
+                total = total * 0.95
+    return total
+
+
 def calc(t, q, u, d, c=None, w=False):
     # t = event type, q = quantity, u = user dict, d = day of week (0=Mon..6=Sun),
     # c = coupon code, w = waitlist
     p = base_price(t, d)
     validate_quantity(q)
     total = p * q
-    if u is not None:
-        if u.get("role") == "student":
-            if u.get("verified"):
-                total = total * 0.8
-            else:
-                total = total * 0.9
-        elif u.get("role") == "staff":
-            total = total * 0.85
-        elif u.get("role") == "alumni":
-            if u.get("years", 0) >= 10:
-                total = total * 0.85
-            else:
-                total = total * 0.95
+    total = apply_role_discount(total, u)
     if q >= 5:
         if t != "workshop":
             total = total - 5.0
