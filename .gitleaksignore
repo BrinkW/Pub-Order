@@ -1,0 +1,10 @@
+# gitleaks false positives. Each entry needs a reason (docs/security/scans/README.md).
+#
+# generic-api-key on the KEY constant in two test files: a made-up UUID the
+# tests use as an order idempotency key (the checkout retry key), not a credential. It
+# grants no access to anything. The first two commits are on main; the last two are the
+# same lines in pre-rebase commits that only exist on a local copy of feature/us3-orders.
+d939a91fa6dd1ee8b7392210ba7509b1c97a758d:frontend/src/cart.test.js:generic-api-key:196
+31297c9fb639bdc81dc1f922c4fb9c2078023112:backend/tests/test_orders.py:generic-api-key:14
+01d1661c72391e1a6cfd9585c9cba35f95d402f5:frontend/src/cart.test.js:generic-api-key:196
+9b283b1021215591091cec5ca37383fda3d58e4c:backend/tests/test_orders.py:generic-api-key:14

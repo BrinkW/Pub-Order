@@ -1,0 +1,10 @@
+
+    ○
+    │╲
+    │ ○
+    ○ ░
+    ░    gitleaks
+
+11:43AM INF 115 commits scanned.
+11:43AM INF scanned ~930509 bytes (930.51 KB) in 977ms
+11:43AM WRN leaks found: 4

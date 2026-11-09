@@ -81,6 +81,44 @@ jobs:
       - name: Production build
         run: npm run build
 
+  # Security stage, in parallel with the test jobs. Each scan is its own step and every scan
+  # runs even if an earlier one failed, so one run shows all findings. Any High finding (any
+  # known vulnerability for pip-audit, any secret for gitleaks) fails the check.
+  # Triage of past results: docs/security/scans/README.md.
+  security:
+    name: security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # gitleaks scans the whole history
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-security.txt
+      - name: Install scanners (pinned)
+        run: pip install -r backend/requirements-security.txt
+      - name: Secret scan (gitleaks, whole history)
+        run: .github/scripts/gitleaks.sh
+      - name: Static analysis (Bandit, High only)
+        if: ${{ !cancelled() }}
+        run: bandit -r backend/app backend/serve.py --severity-level high
+      - name: Static analysis (Semgrep, ERROR only)
+        if: ${{ !cancelled() }}
+        run: semgrep scan --config p/default --severity ERROR --error --metrics=off backend/app backend/serve.py frontend/src
+      - name: Dependency audit (pip-audit)
+        if: ${{ !cancelled() }}
+        run: pip-audit -r backend/requirements.txt -r backend/requirements-dev.txt
+      - uses: actions/setup-node@v7
+        if: ${{ !cancelled() }}
+        with:
+          node-version-file: frontend/.nvmrc
+      - name: Dependency audit (npm, High and above)
+        if: ${{ !cancelled() }}
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
   e2e:
     name: e2e
     needs: [backend, frontend]
@@ -123,10 +161,10 @@ jobs:
           retention-days: 7
 
   # Continuous delivery: every push to main (and the sprint3 tag) publishes a versioned,
-  # runnable build. It only runs after every test job has passed.
+  # runnable build. It only runs after every test job and the security stage have passed.
   deliver:
     name: deliver
-    needs: [backend, frontend, e2e]
+    needs: [backend, frontend, e2e, security]
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:

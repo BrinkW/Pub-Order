@@ -30,6 +30,13 @@ package "frontend job" {
   rectangle "Coverage\nreport\n(≥ 70%)" as F6
 }
 
+package "security job (parallel; every scan runs)" {
+  rectangle "Install\n(pinned\nscanners)" as S1
+  rectangle "Secret scan\n(gitleaks,\nwhole history)" as S2
+  rectangle "Static analysis\n(Bandit, Semgrep:\nHigh only)" as S3
+  rectangle "Dependency audit\n(pip-audit,\nnpm audit ≥ high)" as S4
+}
+
 rectangle "<b>e2e job</b>\n\nBrowser tests\n(Playwright)\nbrowser → Vite →\nFastAPI → Supabase" as E1
 
 rectangle "<b>deliver job</b>\nonly on push to main\nor a sprint3 tag\n\nbuild frontend,\npackage versioned zip,\nsmoke-test it,\npublish artifact\n(+ Release on tag)" as D1
@@ -44,15 +51,20 @@ F2 --> F3
 F3 --> F4
 F4 --> F5
 F5 --> F6
+S1 --> S2
+S2 --> S3
+S3 --> S4
 B6 --> E1
 F6 --> E1
 F6 -[hidden]-> D1
 E1 -[norank]-> D1
+S4 -[norank]-> D1
 
 legend bottom
   Each job's steps run in order and stop at the first failure; unit and integration tests are separate steps.
-  backend, frontend and e2e are required checks on main, so a red check blocks the merge.
-  deliver runs only after every test job passes; on pull requests it is skipped.
+  The security job runs every scan even after a failure, so one run shows all findings; any High finding fails it.
+  backend, frontend, e2e and security are required checks on main, so a red check blocks the merge.
+  deliver runs only after every test job and the security job pass; on pull requests it is skipped.
   Integration and E2E tests use a throwaway local Supabase, never the hosted project.
   Coverage gate: 70% of branches on both sides (the spec's minimum is 50%).
   deliver output: pub-order-0.3.<run>-<commit>.zip, kept 90 days; a sprint3 tag also creates a GitHub Release.
