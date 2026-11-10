@@ -1,30 +1,19 @@
 import { expect, test } from '@playwright/test';
 import { mockMenu } from './menu-fixture.js';
 
-test('meal swipes limit each part of the meal and can be raised', async ({ page }) => {
+test('choosing a main moves to sides, and a sold-out main cannot be chosen', async ({ page }) => {
   await mockMenu(page);
   await page.goto('/#menu');
 
-  const addBurger = page.getByRole('button', { name: 'Add Pub Burger to cart' });
-  const addTenders = page.getByRole('button', { name: 'Add Chicken Tenders to cart' });
-  const increaseSwipes = page.getByRole('button', { name: 'Increase meal swipes' });
-  const decreaseSwipes = page.getByRole('button', { name: 'Decrease meal swipes' });
+  await page.getByRole('button', { name: 'Add Pub Burger' }).click();
 
-  await addBurger.click();
+  await expect(page.getByRole('button', { name: 'Side' })).toHaveAttribute('aria-current', 'step');
+  await expect(page.getByRole('button', { name: 'Add Straight Cut Fries' })).toBeEnabled();
+  await expect(page.getByRole('button', { name: 'Add Chicken Tenders' })).toHaveCount(0);
 
-  await expect(addTenders).toBeDisabled();
-  await expect(addTenders).toHaveText(/Entry limit reached/);
-  await expect(page.getByRole('button', { name: 'Add Straight Cut Fries to cart' })).toBeEnabled();
+  await page.getByRole('button', { name: 'Entrée' }).click();
+  await page.getByRole('button', { name: 'Clear order' }).click();
 
-  await increaseSwipes.click();
-  await expect(page.getByLabel('Meal swipes count', { exact: true })).toHaveText('2');
-  await addTenders.click();
-
-  await expect(page.getByRole('heading', { name: 'Your cart (2)' })).toBeVisible();
-  await expect(decreaseSwipes).toBeDisabled();
-
-  await page.getByRole('button', { name: 'Clear cart' }).click();
-
-  await expect(page.getByRole('heading', { name: 'A little hungry?' })).toBeVisible();
-  await expect(decreaseSwipes).toBeEnabled();
+  await expect(page.getByRole('heading', { name: 'Your meal (0)' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Add Pub Burger' })).toBeEnabled();
 });

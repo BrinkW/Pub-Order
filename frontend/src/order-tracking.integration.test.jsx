@@ -2,7 +2,7 @@
 // Menu, Checkout, OrderPage, MyOrders, cart rules, hash routing and browser storage working
 // together. Only the outside services are faked: Supabase auth and the FastAPI endpoints
 // (/api/menu, /api/checkout/review, /api/orders, /api/orders/{id}).
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App, { pageFromHash } from './App.jsx';
@@ -70,10 +70,11 @@ async function placeOrder() {
   window.location.hash = 'menu';
   const user = userEvent.setup();
   const view = render(<App />);
-  await screen.findByRole('button', { name: 'Add Burger to cart' });
-  await user.click(screen.getByRole('button', { name: 'Review checkout' }));
-  await user.click(screen.getByRole('button', { name: 'Validate checkout' }));
-  await user.click(await screen.findByRole('button', { name: 'Place order' }));
+  await screen.findByRole('button', { name: 'Add Burger' });
+  await user.click(screen.getByRole('button', { name: 'Look over your order' }));
+  const place = await screen.findByRole('button', { name: 'Place order' });
+  await waitFor(() => expect(place).toBeEnabled());
+  await user.click(place);
   await screen.findByRole('heading', { name: 'Order received' });
   return { user, view };
 }
@@ -131,7 +132,7 @@ describe('US4: placing an order opens its confirmation', () => {
     await user.click(screen.getByRole('button', { name: 'Order something else' }));
 
     expect(window.location.hash).toBe('#menu');
-    expect(screen.getByRole('heading', { name: 'A little hungry?' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Your meal (0)' })).toBeInTheDocument();
   });
 });
 

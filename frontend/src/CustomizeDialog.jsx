@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from 'react';
-import { customizeHint, includedOptionIds, optionsFor } from './customizations.js';
+import { includedOptionIds, optionsFor } from './customizations.js';
 
 export default function CustomizeDialog({ item, selected, inCart, onClose, onSave }) {
   const titleId = useId();
@@ -42,7 +42,6 @@ export default function CustomizeDialog({ item, selected, inCart, onClose, onSav
         onMouseDown={(event) => event.stopPropagation()}
       >
         <h2 id={titleId}>Customize {item.name}</h2>
-        <p>{customizeHint(item)} {inCart ? 'Then save this cart item.' : 'Then add it to your cart.'}</p>
         {groups.map(([name, group]) => (
           <div className="customize-group" key={name}>
             {groups.length > 1 ? <p className="customize-group-label">{name}</p> : null}

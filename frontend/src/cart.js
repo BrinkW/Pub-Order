@@ -41,6 +41,7 @@ export function restoreCart(serialized) {
       items: Object.fromEntries(entries),
       reviewedTypes: Object.fromEntries(entries.filter(([id]) => SWIPE_TYPES.includes(value.reviewedTypes?.[id])).map(([id]) => [id, value.reviewedTypes[id]])),
       customizations,
+      ...(value.noSide === true ? { noSide: true } : {}),
       ...(typeof value.checkoutKey === 'string' && UUID.test(value.checkoutKey) ? { checkoutKey: value.checkoutKey } : {}),
     };
   } catch { return emptyCart(); }
@@ -107,18 +108,90 @@ export function filterMenu(query, category, catalog) {
     `${item.name} ${item.description} ${item.label}`.toLowerCase().includes(search));
 }
 
+const PART_WORD = { Entry: ['entrée', 'entrées'], Side: ['side', 'sides'], Drink: ['drink', 'drinks'] };
+
+export function compositionMessage(type, needed, have) {
+  const [one, many] = PART_WORD[type];
+  if (needed === 1 && have === 0) return `Add ${type === 'Entry' ? 'an' : 'a'} ${one} before sending this order.`;
+  if (needed === 1) return `This order can only include one ${one}.`;
+  return `This order needs ${needed} ${many}. It has ${have}.`;
+}
+
+// Swaps the one item of this kind when the order is a single meal swipe.
+export function selectForMeal(cart, item, catalog) {
+  if (!item?.available) return cart;
+  const items = {};
+  const reviewedTypes = {};
+  const customizations = {};
+  for (const id of Object.keys(cart.items || {})) {
+    const known = catalog.find((candidate) => candidate.id === id);
+    if (known?.swipeType === item.swipeType) continue;
+    items[id] = 1;
+    if (cart.reviewedTypes?.[id]) reviewedTypes[id] = cart.reviewedTypes[id];
+    if (cart.customizations?.[id]) customizations[id] = cart.customizations[id];
+  }
+  items[item.id] = 1;
+  reviewedTypes[item.id] = cart.reviewedTypes?.[item.id] || item.swipeType;
+  if (cart.customizations?.[item.id]) customizations[item.id] = cart.customizations[item.id];
+  const next = { ...changed(cart), swipes: 1, items, reviewedTypes, customizations };
+  if (item.swipeType === 'Side') delete next.noSide;
+  else if (cart.noSide) next.noSide = true;
+  return next;
+}
+
+// Adds one of this item without dropping the other choices. A single swipe can still swap its one item.
+export function addToMeal(cart, item, catalog) {
+  if (!item?.available) return cart;
+  const have = cart.items?.[item.id] || 0;
+  const used = countsByType(cart.items || {}, catalog)[item.swipeType] || 0;
+  if (used >= cart.swipes) {
+    if (cart.swipes === 1 && have === 0) return selectForMeal(cart, item, catalog);
+    return cart;
+  }
+  const next = setQuantity(cart, item.id, have + 1, catalog);
+  if (next === cart || item.swipeType !== 'Side' || !next.noSide) return next;
+  const chosen = { ...next };
+  delete chosen.noSide;
+  return chosen;
+}
+
+// A side is optional. This drops any chosen side and records that the student picked none.
+export function chooseNoSide(cart, catalog) {
+  const cleared = clearSwipeType(cart, 'Side', catalog);
+  if (cleared.noSide) return cleared;
+  return { ...(cleared === cart ? changed(cart) : cleared), noSide: true };
+}
+
+export function clearSwipeType(cart, swipeType, catalog) {
+  const items = { ...(cart.items || {}) };
+  const reviewedTypes = { ...(cart.reviewedTypes || {}) };
+  const customizations = { ...(cart.customizations || {}) };
+  let removed = false;
+  for (const id of Object.keys(items)) {
+    const known = catalog.find((candidate) => candidate.id === id);
+    if (known?.swipeType !== swipeType && reviewedTypes[id] !== swipeType) continue;
+    delete items[id];
+    delete reviewedTypes[id];
+    delete customizations[id];
+    removed = true;
+  }
+  if (!removed) return cart;
+  return { ...changed(cart), items, reviewedTypes, customizations };
+}
+
 export function checkoutErrors(cart, catalog) {
-  if (!validQuantity(cart.swipes)) return ['Choose between 1 and 10 meal swipes.'];
-  if (!record(cart.items) || Object.keys(cart.items).length === 0) return ['Your cart is empty.'];
+  if (!validQuantity(cart.swipes)) return ['Use between 1 and 10 meal swipes.'];
+  if (!record(cart.items) || Object.keys(cart.items).length === 0) return ['Your order is empty.'];
   const errors = [];
   for (const [id, quantity] of Object.entries(cart.items)) {
-    if (!validQuantity(quantity)) errors.push(`Invalid quantity for ${id}. Choose a whole number from 1 to 10.`);
+    if (!validQuantity(quantity)) errors.push(`${id} needs a quantity from 1 to 10.`);
     const item = catalog.find((candidate) => candidate.id === id);
-    if (!item?.available) errors.push(`${item?.name || id} is unavailable. Remove it before continuing.`);
+    if (!item?.available) errors.push(`${item?.name || id} is sold out. Pick something else.`);
   }
   const counts = countsByType(cart.items, catalog);
   for (const type of SWIPE_TYPES) {
-    if (counts[type] !== cart.swipes) errors.push(`Choose exactly ${cart.swipes} ${type.toLowerCase()} item(s); your cart has ${counts[type]}.`);
+    if (type === 'Side' && counts.Side === 0) continue;
+    if (counts[type] !== cart.swipes) errors.push(compositionMessage(type, cart.swipes, counts[type]));
   }
   return errors;
 }

@@ -45,7 +45,7 @@ export async function reviewCart(cart, catalog) {
   if (!token) return { signInRequired: true };
   const response = await postJson('/api/checkout/review', token, { swipes: cart.swipes, items: cartItems(cart, catalog) });
   if (response.status === 401) return { signInRequired: true };
-  if (!response.ok) throw new Error(response.status === 422 ? 'The cart is invalid. Check quantities and try again.' : 'Could not check the latest menu. Your cart is still here; please try again.');
+  if (!response.ok) throw new Error(response.status === 422 ? 'Something in this order needs a change. Check it and try again.' : 'Could not check the latest menu. Your order is still here; please try again.');
   return response.json();
 }
 

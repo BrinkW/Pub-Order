@@ -14,15 +14,13 @@ test('a signed-in student builds a meal from the database menu and the server va
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
   await expect(page.getByText(`Signed in as ${email}`)).toBeVisible();
-  await expect(page.getByRole('article')).toHaveCount(22);
+  await expect(page.getByRole('article')).toHaveCount(11);
 
-  await page.getByRole('button', { name: 'Add Pub Burger to cart' }).click();
-  await page.getByRole('button', { name: 'Add Straight Cut Fries to cart' }).click();
-  await page.getByRole('button', { name: 'Add Sweet Tea to cart' }).click();
-  await page.getByRole('button', { name: 'Review checkout' }).click();
-  await page.getByRole('button', { name: 'Validate checkout' }).click();
-
-  await expect(page.getByText(/Your meal is valid: 1 meal swipe/)).toBeVisible();
+  await page.getByRole('button', { name: 'Add Pub Burger' }).click();
+  await page.getByRole('button', { name: 'Add Straight Cut Fries' }).click();
+  await page.getByRole('button', { name: 'Add Sweet Tea' }).click();
+  await expect(page.getByRole('button', { name: 'Place order' })).toBeEnabled();
+  await expect(page.getByText(/This order looks good/)).toHaveCount(0);
 });
 
 test('a signed-in student places an order and it is saved', async ({ page }) => {
@@ -31,11 +29,9 @@ test('a signed-in student places an order and it is saved', async ({ page }) => 
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
-  await page.getByRole('button', { name: 'Add Chicken Tenders to cart' }).click();
-  await page.getByRole('button', { name: 'Add Pretzel Sticks to cart' }).click();
-  await page.getByRole('button', { name: 'Add Apple Juice to cart' }).click();
-  await page.getByRole('button', { name: 'Review checkout' }).click();
-  await page.getByRole('button', { name: 'Validate checkout' }).click();
+  await page.getByRole('button', { name: 'Add Chicken Tenders' }).click();
+  await page.getByRole('button', { name: 'Add Pretzel Sticks' }).click();
+  await page.getByRole('button', { name: 'Add Apple Juice' }).click();
   await page.getByRole('button', { name: 'Place order' }).click();
 
   await expect(page.getByRole('heading', { name: 'Order received' })).toBeVisible();
@@ -45,9 +41,9 @@ test('a signed-in student places an order and it is saved', async ({ page }) => 
   await expect(summary.getByText('Apple Juice')).toBeVisible();
 
   await page.getByRole('button', { name: 'Order something else' }).click();
-  await expect(page.getByRole('heading', { name: 'A little hungry?' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your meal (0)' })).toBeVisible();
 
   await page.reload();
 
-  await expect(page.getByRole('heading', { name: 'A little hungry?' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Your meal (0)' })).toBeVisible();
 });

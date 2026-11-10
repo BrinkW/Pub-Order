@@ -1,5 +1,5 @@
 // Seed reference and test fixture only. Runtime menu data comes from GET /api/menu.
-// One meal swipe = one Entry + one Side + one Drink.
+// One meal swipe = one Entry + one Drink. A Side is optional.
 export const MENU_IMAGE_BASE = '/images/menu/';
 
 export const MENU_ITEMS = [
