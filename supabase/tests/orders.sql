@@ -109,4 +109,74 @@ begin
     raise exception 'The repeated submission created a duplicate order';
   end if;
 end $$;
+
+-- SEC-03: a student can have at most 3 orders in progress and place at most 5 in 10 minutes.
+-- Student B has no orders yet. Status changes are made as the database owner, like the kitchen.
+set local role authenticated;
+select set_config('request.jwt.claims', '{"sub": "00000000-0000-4000-8000-00000000000b", "role": "authenticated"}', true);
+do $$
+declare
+  v_meal jsonb := '[{"id": "pub-burger", "quantity": 1}, {"id": "straight-cut-fries", "quantity": 1}, {"id": "sweet-tea", "quantity": 1}]';
+  v_first uuid;
+  v_detail text;
+begin
+  v_first := public.place_order('00000000-0000-4000-8000-0000000000b1', 1, v_meal);
+  perform public.place_order('00000000-0000-4000-8000-0000000000b2', 1, v_meal);
+  perform public.place_order('00000000-0000-4000-8000-0000000000b3', 1, v_meal);
+  begin
+    perform public.place_order('00000000-0000-4000-8000-0000000000b4', 1, v_meal);
+    raise exception 'SEC-03: a fourth order in progress was accepted';
+  exception when sqlstate 'PT429' then
+    get stacked diagnostics v_detail = pg_exception_detail;
+    if v_detail <> 'open_orders' then
+      raise exception 'SEC-03: expected the open-orders limit, got %', v_detail;
+    end if;
+  end;
+  if public.place_order('00000000-0000-4000-8000-0000000000b1', 1, v_meal) is distinct from v_first then
+    raise exception 'SEC-03: retrying a placed order must still return it at the limit';
+  end if;
+end $$;
+reset role;
+
+-- Picking up one order makes room for another.
+update public.orders set status = 'Collected' where idempotency_key = '00000000-0000-4000-8000-0000000000b1';
+set local role authenticated;
+do $$
+begin
+  perform public.place_order(
+    '00000000-0000-4000-8000-0000000000b4', 1,
+    '[{"id": "pub-burger", "quantity": 1}, {"id": "straight-cut-fries", "quantity": 1}, {"id": "sweet-tea", "quantity": 1}]'
+  );
+end $$;
+reset role;
+
+-- A fifth order in 10 minutes is still allowed; a sixth is not, even with room in progress.
+update public.orders set status = 'Collected' where idempotency_key = '00000000-0000-4000-8000-0000000000b2';
+set local role authenticated;
+do $$
+begin
+  perform public.place_order(
+    '00000000-0000-4000-8000-0000000000b5', 1,
+    '[{"id": "pub-burger", "quantity": 1}, {"id": "straight-cut-fries", "quantity": 1}, {"id": "sweet-tea", "quantity": 1}]'
+  );
+end $$;
+reset role;
+update public.orders set status = 'Collected' where idempotency_key = '00000000-0000-4000-8000-0000000000b3';
+set local role authenticated;
+do $$
+declare
+  v_detail text;
+begin
+  perform public.place_order(
+    '00000000-0000-4000-8000-0000000000b6', 1,
+    '[{"id": "pub-burger", "quantity": 1}, {"id": "straight-cut-fries", "quantity": 1}, {"id": "sweet-tea", "quantity": 1}]'
+  );
+  raise exception 'SEC-03: a sixth order in 10 minutes was accepted';
+exception when sqlstate 'PT429' then
+  get stacked diagnostics v_detail = pg_exception_detail;
+  if v_detail <> 'recent_orders' then
+    raise exception 'SEC-03: expected the recent-orders limit, got %', v_detail;
+  end if;
+end $$;
+reset role;
 rollback;

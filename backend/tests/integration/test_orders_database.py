@@ -211,3 +211,32 @@ def test_retry_keys_are_scoped_to_the_student(client, student, other_student, pl
     placed.append(second.json()["id"])
     assert second.json()["id"] != first.json()["id"]
     assert place(client, student[0], key).json() == first.json()
+
+
+@pytest.fixture
+def fresh_student(admin):
+    """A student with no orders yet. Deleting the account also deletes its orders."""
+    email, password = f"limit-test-{uuid4().hex[:8]}@vanderbilt.edu", f"pw-{uuid4().hex}"
+    user = admin.auth.admin.create_user({"email": email, "password": password, "email_confirm": True}).user
+    yield sign_in(email, password)
+    admin.auth.admin.delete_user(user.id)
+
+
+def test_a_fourth_order_in_progress_is_refused(client, admin, fresh_student):
+    """SEC-03 regression: a student can have at most 3 orders in progress, so a script can't
+    flood the kitchen. A retry of an order already placed still returns it."""
+    token, user_id = fresh_student
+    first_key = str(uuid4())
+    assert place(client, token, first_key).status_code == 201
+    assert place(client, token).status_code == 201
+    assert place(client, token).status_code == 201
+    key = str(uuid4())
+
+    response = place(client, token, key)
+
+    assert response.status_code == 429
+    assert "3 orders in progress" in response.json()["detail"]
+    assert stored_orders(admin, key) == []
+    assert place(client, token, first_key).status_code == 201
+    stored = admin.table("orders").select("id").eq("user_id", user_id).execute().data
+    assert len(stored) == 3

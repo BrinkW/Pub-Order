@@ -103,21 +103,22 @@ Covers `POST /orders`, `GET /orders` and `GET /orders/{id}` in [app/orders.py](.
 
 | Test | What it checks |
 |---|---|
-| [`test_place_order_saves_and_returns_the_order`](../backend/tests/test_orders.py#L115) | A valid meal calls `place_order` with the student's token, the key and the items, and returns the saved order (201). |
-| [`test_meal_needing_review_is_not_saved`](../backend/tests/test_orders.py#L135) | An unavailable item gives 409 with the issues, and nothing is sent to the database. |
-| [`test_incomplete_meal_is_not_saved`](../backend/tests/test_orders.py#L145) | A meal missing a side and a drink gives 409 with composition issues. |
-| [`test_guest_cannot_place_an_order`](../backend/tests/test_orders.py#L154) | Without a token the request gets 401. |
-| [`test_invalid_requests_are_rejected`](../backend/tests/test_orders.py#L167) ×4 | A missing or malformed checkout key, an extra field, or 11 swipes gives 422. |
-| [`test_database_rejecting_the_meal_becomes_409`](../backend/tests/test_orders.py#L174) | If the database function refuses the meal (the menu changed in between), the student gets 409. |
-| [`test_database_failures_are_sanitized`](../backend/tests/test_orders.py#L187) ×2 | Database and network errors give 503 without leaking details, and say the cart is kept. |
-| [`test_order_that_cannot_be_read_back_is_503`](../backend/tests/test_orders.py#L197) | A saved order that can't be read back gives 503. |
-| [`test_user_client_acts_as_the_student`](../backend/tests/test_orders.py#L205) | Database requests carry the student's token, so row-level security applies. |
-| [`test_lists_the_students_orders_newest_first`](../backend/tests/test_orders.py#L221) | `GET /orders` lists the student's orders, newest first. |
-| [`test_reads_one_of_the_students_orders`](../backend/tests/test_orders.py#L232) | `GET /orders/{id}` returns the order with its items in Entry, Side, Drink order. |
-| [`test_an_order_the_student_cannot_see_is_404`](../backend/tests/test_orders.py#L240) | Someone else's or a missing order gives 404, so existence isn't revealed. |
-| [`test_an_invalid_order_id_is_422`](../backend/tests/test_orders.py#L247) | A malformed id gives 422. |
-| [`test_guest_cannot_read_orders`](../backend/tests/test_orders.py#L252) ×2 | Reading orders without a token gives 401. |
-| [`test_read_failures_are_sanitized`](../backend/tests/test_orders.py#L260) ×2 | Read errors give 503 without leaking details. |
+| [`test_place_order_saves_and_returns_the_order`](../backend/tests/test_orders.py#L118) | A valid meal calls `place_order` with the student's token, the key and the items, and returns the saved order (201). |
+| [`test_meal_needing_review_is_not_saved`](../backend/tests/test_orders.py#L163) | An unavailable item gives 409 with the issues, and nothing is sent to the database. |
+| [`test_incomplete_meal_is_not_saved`](../backend/tests/test_orders.py#L173) | A meal missing a side and a drink gives 409 with composition issues. |
+| [`test_guest_cannot_place_an_order`](../backend/tests/test_orders.py#L182) | Without a token the request gets 401. |
+| [`test_invalid_requests_are_rejected`](../backend/tests/test_orders.py#L195) ×4 | A missing or malformed checkout key, an extra field, or 11 swipes gives 422. |
+| [`test_database_rejecting_the_meal_becomes_409`](../backend/tests/test_orders.py#L202) | If the database function refuses the meal (the menu changed in between), the student gets 409. |
+| [`test_database_failures_are_sanitized`](../backend/tests/test_orders.py#L231) ×2 | Database and network errors give 503 without leaking details, and say the cart is kept. |
+| [`test_order_that_cannot_be_read_back_is_503`](../backend/tests/test_orders.py#L241) | A saved order that can't be read back gives 503. |
+| [`test_order_limit_becomes_429_with_the_reason`](../backend/tests/test_orders.py#L216) ×3 | **SEC-03:** when the database refuses an order over a student's limit (errcode PT429), the API answers 429 with the reason: 3 orders in progress, or 5 orders in 10 minutes. A missing reason falls back to the in-progress message, and no database text leaks. |
+| [`test_user_client_acts_as_the_student`](../backend/tests/test_orders.py#L249) | Database requests carry the student's token, so row-level security applies. |
+| [`test_lists_the_students_orders_newest_first`](../backend/tests/test_orders.py#L265) | `GET /orders` lists the student's orders, newest first. |
+| [`test_reads_one_of_the_students_orders`](../backend/tests/test_orders.py#L276) | `GET /orders/{id}` returns the order with its items in Entry, Side, Drink order. |
+| [`test_an_order_the_student_cannot_see_is_404`](../backend/tests/test_orders.py#L284) | Someone else's or a missing order gives 404, so existence isn't revealed. |
+| [`test_an_invalid_order_id_is_422`](../backend/tests/test_orders.py#L291) | A malformed id gives 422. |
+| [`test_guest_cannot_read_orders`](../backend/tests/test_orders.py#L296) ×2 | Reading orders without a token gives 401. |
+| [`test_read_failures_are_sanitized`](../backend/tests/test_orders.py#L304) ×2 | Read errors give 503 without leaking details. |
 
 ### Cancelling an order: [test_cancel_order.py](../backend/tests/test_cancel_order.py)
 
@@ -191,6 +192,7 @@ Marked `integration`. No mocks: orders go through FastAPI, `app/orders.py` and t
 | [`test_guest_cannot_place_an_order`](../backend/tests/integration/test_orders_database.py#L156) | **Failure path:** without a token, 401 and nothing stored. |
 | [`test_student_cannot_insert_an_order_directly`](../backend/tests/integration/test_orders_database.py#L165) | **Failure path:** a student writing to `orders` directly, bypassing the API, is refused. |
 | [`test_database_function_rechecks_the_meal`](../backend/tests/integration/test_orders_database.py#L177) | **Failure path:** the database function itself refuses an incomplete meal (errcode 22023). |
+| [`test_a_fourth_order_in_progress_is_refused`](../backend/tests/integration/test_orders_database.py#L225) | **SEC-03 regression, failure path:** a new student places 3 orders; the 4th gives 429 "3 orders in progress" and stores nothing, while retrying the first order still returns it. Uses its own account, so the shared test user's orders don't count. |
 
 ### Integration: order confirmation and pickup tracking: [integration/test_order_tracking_database.py](../backend/tests/integration/test_order_tracking_database.py)
 
@@ -412,15 +414,17 @@ Covers ordering from checkout (US3) with the real Menu, Checkout, cart rules and
 
 | Test | What it checks |
 |---|---|
-| [only offers Place order after a valid review](../frontend/src/place-order.test.jsx#L75) | **Place order** appears only once the server has confirmed the meal. |
-| [sends the meal with the login token and a checkout key, then clears the cart](../frontend/src/place-order.test.jsx#L89) | The request carries the token, the meal and a UUID key; afterwards the saved order is handed to the app (which opens its confirmation page) and the cart is empty. |
-| [retries a failed attempt with the same checkout key and keeps the cart meanwhile](../frontend/src/place-order.test.jsx#L110) | After a failed attempt the cart and its key are kept, and the retry sends the same key, so it can't create a second order. |
-| [shows the latest review when the menu changed before ordering, and keeps the cart](../frontend/src/place-order.test.jsx#L127) | A 409 re-runs the review and shows what changed; no confirmation opens and the cart stays. |
-| [asks the student to sign in again when the session expired](../frontend/src/place-order.test.jsx#L143) | A 401 shows **Sign in and keep cart**. |
-| [disables Place order while the order is being saved](../frontend/src/place-order.test.jsx#L153) | The button reads "Placing order…" and can't be clicked twice. |
-| [opens no confirmation when the order was not saved](../frontend/src/place-order.test.jsx#L165) | A failed save shows the error and never opens a confirmation. |
-| [acknowledges a saved order after Back to cart unmounts checkout](../frontend/src/place-order.test.jsx#L177) | An order that finishes saving after the student left the review still clears the cart and opens its confirmation. |
-| [keeps a newly edited cart when an earlier order finishes saving](../frontend/src/place-order.test.jsx#L188) | A cart changed while the order was saving is kept, not cleared. |
+| [only offers Place order after a valid review](../frontend/src/place-order.test.jsx#L76) | **Place order** appears only once the server has confirmed the meal. |
+| [sends the meal with the login token and a checkout key, then clears the cart](../frontend/src/place-order.test.jsx#L90) | The request carries the token, the meal and a UUID key; afterwards the saved order is handed to the app (which opens its confirmation page) and the cart is empty. |
+| [retries a failed attempt with the same checkout key and keeps the cart meanwhile](../frontend/src/place-order.test.jsx#L111) | After a failed attempt the cart and its key are kept, and the retry sends the same key, so it can't create a second order. |
+| [explains an order limit and keeps the cart (SEC-03)](../frontend/src/place-order.test.jsx#L128) | A 429 shows the server's reason ("You already have 3 orders in progress…") as an alert, places no order and keeps the cart. |
+| [falls back to a general limit message when the 429 has no reason](../frontend/src/place-order.test.jsx#L140) | A 429 without a reason shows "You have too many orders right now." |
+| [shows the latest review when the menu changed before ordering, and keeps the cart](../frontend/src/place-order.test.jsx#L149) | A 409 re-runs the review and shows what changed; no confirmation opens and the cart stays. |
+| [asks the student to sign in again when the session expired](../frontend/src/place-order.test.jsx#L165) | A 401 shows **Sign in and keep cart**. |
+| [disables Place order while the order is being saved](../frontend/src/place-order.test.jsx#L175) | The button reads "Placing order…" and can't be clicked twice. |
+| [opens no confirmation when the order was not saved](../frontend/src/place-order.test.jsx#L187) | A failed save shows the error and never opens a confirmation. |
+| [acknowledges a saved order after Back to cart unmounts checkout](../frontend/src/place-order.test.jsx#L199) | An order that finishes saving after the student left the review still clears the cart and opens its confirmation. |
+| [keeps a newly edited cart when an earlier order finishes saving](../frontend/src/place-order.test.jsx#L210) | A cart changed while the order was saving is kept, not cleared. |
 
 ### Order status rules: [order-status.test.js](../frontend/src/order-status.test.js)
 
@@ -557,6 +561,10 @@ Checks the dev-server settings the frontend needs to reach the backend. A wrong 
 ## Database: [supabase/tests/menu_items.sql](../supabase/tests/menu_items.sql)
 
 The backend CI job runs this script against the local test database, after `supabase start` has applied [the menu migration](../supabase/migrations/202610120001_menu_items.sql). It checks that the 22 seed items exist (11 counted as entrées), that invalid swipe types are refused, that row-level security is on, and that guests and students can read the menu but not change it. It runs inside a transaction, so nothing is left behind.
+
+## Database: [supabase/tests/orders.sql](../supabase/tests/orders.sql)
+
+Runs the same way, after every migration, in a transaction that is rolled back. It checks the `orders` table constraints, that guests can't read or place orders, that students place orders only through `place_order` (a retry with the same key returns the same order, the student's email and customizations are stored, incomplete meals and unknown items are refused), and that one student can't see another's orders. For SEC-03 it checks the order limits inside `place_order`: a 4th order in progress is refused (errcode PT429, detail `open_orders`) while a retry of a placed order still works; once an order is picked up the student can order again; and a 6th order in 10 minutes is refused (detail `recent_orders`) even with room in progress.
 
 ## Database: [supabase/tests/roles.sql](../supabase/tests/roles.sql)
 
