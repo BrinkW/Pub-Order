@@ -1,6 +1,7 @@
 // Kitchen staff see every order and move it between Received, Preparing, Ready, and Collected.
 import { useEffect, useRef, useState } from 'react';
 import { loadMenu, setItemAvailability } from './menu-api.js';
+import { CrowdMeterControls } from './CrowdMeter.jsx';
 import PubHeader from './PubHeader.jsx';
 import { loadOrders, updateOrderStatus } from './order-api.js';
 import { ORDER_STATUSES, formatPlacedAt, isOpenOrder, shortOrderId, stepLabel, swipeLabel } from './order-status.js';
@@ -83,6 +84,8 @@ export default function Kitchen({ email, onSignOut }) {
           <h1 ref={heading} tabIndex={-1}>Orders</h1>
           <p>Update an order’s status, or mark a menu item sold out so students cannot order it.</p>
         </section>
+
+        <CrowdMeterControls />
 
         {state === 'loading' && <p role="status">Loading orders…</p>}
         {state === 'signIn' && <div className="order-message"><p>Sign in with the kitchen account to update orders.</p></div>}

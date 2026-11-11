@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Checkout from './Checkout.jsx';
+import { CrowdMeter } from './CrowdMeter.jsx';
 import CustomizeDialog from './CustomizeDialog.jsx';
 import NutritionDialog from './NutritionDialog.jsx';
 import { loadMenu } from './menu-api.js';
@@ -172,6 +173,7 @@ export default function Menu({ email, onBack, onViewOrders, onOrderPlaced }) {
           <div className="menu-demo-note"><strong>Meal swipe menu</strong><span>Review your meal before ordering. One entrée, side, and drink per swipe.</span></div>
         </section>
 
+        <CrowdMeter />
         {checkout ? <Checkout cart={cart} catalog={catalog} onBack={showCart} onSignIn={onBack} onAcceptChanges={acceptChanges} onEnsureCheckoutKey={ensureCheckoutKey} onOrderPlaced={orderPlaced} /> : <div className="menu-layout">
           <section className="menu-catalog" aria-label="Food and drinks">
             {loadState === 'ready' && <button className="menu-text-button" onClick={() => setAttempt((n) => n + 1)}>Refresh menu</button>}
