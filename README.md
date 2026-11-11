@@ -47,6 +47,8 @@ First, copy `.env.example` to `.env` in the repo root and fill in the Supabase U
 
 Before using the app, apply the migrations in `supabase/migrations/` once, in filename order, to the intended Supabase project: `202610120001_menu_items.sql` (the menu) and then `202610180001_orders.sql` (orders). See [Hamayun’s US1/US2 walkthrough](docs/hamayun-us1-us2.md) for setup, the meal-swipe rules, API contract, tests, and the US3 handoff.
 
+Kitchen staff can email a student the current status of an order. Apply the order-email migration, then set `RESEND_API_KEY` and `NOTIFICATION_FROM_EMAIL` in the backend environment. The sender must be verified by Resend; the API key remains server-side and must never be committed.
+
 **Orders API (US3).** Signed-in students place orders with `POST /api/orders` (the checkout review body plus an `idempotencyKey`), and read their own orders with `GET /api/orders` and `GET /api/orders/{id}`. Orders are saved only through the `place_order` database function, which re-checks the meal and stores the order and its items together; retrying with the same key returns the same order. New orders start as `Received`; the status column also allows `Preparing`, `Ready` and `Collected` for US5 and US6.
 
 Frontend (Node.js 22.12+):
