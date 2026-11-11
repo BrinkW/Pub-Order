@@ -27,6 +27,11 @@ ORDER_COLUMNS = "id,status,swipes,created_at,order_items(menu_item_id,name,swipe
 TYPE_ORDER = ["Entry", "Side", "Drink"]
 INVALID_ORDER = "22023"  # errcode raised by place_order() for a meal it won't accept
 WRONG_STATE = "55000"  # errcode for a cancel that is too late, or a status change to a cancelled order
+TOO_LATE_TO_CANCEL = {
+    "Preparing": "The kitchen has already started this order, so it can't be cancelled.",
+    "Ready": "This order is ready for pickup, so it can't be cancelled.",
+    "Collected": "This order has already been picked up, so it can't be cancelled.",
+}
 
 
 class PlaceOrderRequest(CheckoutRequest):
@@ -201,18 +206,24 @@ def cancel_order(
     db = user_client(access_token(credentials))
     try:
         db.rpc("cancel_order", {"p_order_id": str(order_id)}).execute()
-        saved = fetch_order(db, str(order_id))
     except APIError as exc:
+        if exc.code == "42501":
+            raise HTTPException(401, "Sign in required.") from exc
         if exc.code == "P0002":
             raise HTTPException(404, "Order not found.") from exc
         if exc.code == WRONG_STATE:
-            raise HTTPException(409, "The kitchen has already started this order, so it can't be cancelled.") from exc
+            # The database passes the order's current status as the error detail.
+            message = TOO_LATE_TO_CANCEL.get(exc.details or "", TOO_LATE_TO_CANCEL["Preparing"])
+            raise HTTPException(409, message) from exc
         raise HTTPException(503, "Could not cancel this order. Please try again.") from exc
     except Exception as exc:
         raise HTTPException(503, "Could not cancel this order. Please try again.") from exc
-    if saved is None:
-        raise HTTPException(404, "Order not found.")
-    return saved
+    # The cancel has been saved. If reading the order back fails, still report it as cancelled.
+    try:
+        saved = fetch_order(db, str(order_id))
+    except Exception:
+        saved = None
+    return saved or {"id": str(order_id), "status": "Cancelled"}
 
 
 @router.patch("/orders/{order_id}")
