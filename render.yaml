@@ -1,0 +1,22 @@
+# Render Blueprint for the staging site. Render builds the root Dockerfile and deploys
+# main only after the GitHub Actions checks on that commit pass.
+services:
+  - type: web
+    name: pub-order
+    runtime: docker
+    plan: free
+    branch: main
+    autoDeployTrigger: checksPass
+    healthCheckPath: /
+    envVars:
+      # Entered in the Render dashboard when the Blueprint is created; never committed.
+      # SUPABASE_KEY must be the public anon/publishable key, not the service-role key.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false
+      # Optional: kitchen "Email student" notifications through Resend. Server-side only.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: NOTIFICATION_FROM_EMAIL
+        sync: false

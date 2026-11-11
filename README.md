@@ -117,13 +117,32 @@ npm run test:e2e    # starts the dev server itself (and the backend when a test 
 - **backend** and **frontend:** install → lint → type check (backend only) → unit tests → integration tests → coverage report, stopping at the first failure. The backend job also checks the menu migration and its permissions.
 - **security:** in parallel with the test jobs, scans for secrets in the whole git history (gitleaks), runs static analysis (Bandit for Python, Semgrep for Python and JavaScript) and audits dependencies (`pip-audit`, `npm audit --audit-level=high`). Every scan runs even if an earlier one fails, and any High finding fails the check. Scanner versions are pinned in `backend/requirements-security.txt`; known false positives are listed with reasons in `.gitleaksignore`. Results and triage: [docs/security/scans/](docs/security/scans/README.md).
 - **e2e:** browser tests against the real stack after both pass.
-- **deliver:** after the test jobs and the security job pass, on every push to `main`, packages a versioned, runnable build (`pub-order-0.3.<run>-<commit>.zip`, run with `uvicorn serve:app`) as a workflow artifact. Pushing a `sprint3` tag also publishes it as a GitHub Release.
+- **deliver:** after the test jobs and the security job pass, on every push to `main`, packages a versioned, runnable build (`pub-order-0.3.<run>-<commit>.zip`, run with `uvicorn serve:app`) as a workflow artifact, and smoke-tests the Docker image used for staging (see [Deploy](#deploy-staging)). Pushing a `sprint3` tag also publishes it as a GitHub Release.
 
 Packaged builds read the Supabase URL and public anon/publishable key from the root `.env` at server startup and expose those public values through `/config.js`. No GitHub build secrets or frontend rebuild are needed. Never use a service-role key as `SUPABASE_KEY`. Apply the included `migrations/` SQL files in filename order to the configured project before use.
 
 The frontend job also checks that the production build succeeds. See [docs/testing.md](docs/testing.md) for a list of every test and what it checks.
 
 For trying the API by hand, use the Swagger UI at `/docs` on the running backend.
+
+## Deploy (staging)
+
+The staging site runs on [Render](https://render.com) from the root [Dockerfile](Dockerfile), which builds the frontend and serves it with the API from one process (`backend/serve.py`), over HTTPS. [render.yaml](render.yaml) tells Render to deploy `main` only after that commit's GitHub checks pass, so nothing is deployed by hand and a red pipeline blocks the deploy. The free instance sleeps after 15 minutes idle, so the first visit after a break takes about a minute.
+
+To run the same build locally (Docker needed), with the root `.env` filled in:
+
+```sh
+docker compose up --build    # http://localhost:8000
+```
+
+One-time setup:
+
+1. In Render, choose **New → Blueprint**, pick this repository, and enter `SUPABASE_URL` and `SUPABASE_KEY` when asked. Use the public anon/publishable key, never the service-role key. For the kitchen's **Email student** button, also enter `RESEND_API_KEY` and `NOTIFICATION_FROM_EMAIL`; leave them blank to run without email. Render only asks for these when the Blueprint is created; change them later under the service's **Environment** tab.
+2. In the hosted Supabase project, under **Authentication → URL Configuration**, set **Site URL** to the Render URL and add it to **Redirect URLs** (keep `http://localhost:5173` for development). Otherwise sign-up emails link to localhost.
+3. Make sure every file in `supabase/migrations/` has been applied to the hosted project, in filename order.
+4. To use the kitchen view, set an account's `role` to `kitchen` in the `profiles` table.
+
+The Supabase keys live only in Render's dashboard. GitHub Actions never sees them, because CI tests against a throwaway local Supabase.
 
 ## Team
 
