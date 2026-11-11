@@ -1,0 +1,14 @@
+.crowd-meter { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin: -12px 0 32px; padding: 18px 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--card); }
+.crowd-meter-kicker { margin: 0 0 4px !important; color: var(--muted) !important; font-size: 10px !important; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+.crowd-meter h2 { margin: 0; font-size: 22px; }
+.crowd-meter h2 + p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+.crowd-meter-dots { display: flex; gap: 5px; }
+.crowd-meter-dots i { display: block; width: 11px; height: 11px; border-radius: 100%; background: var(--line); }
+.crowd-meter-low .crowd-meter-dots i:first-child { background: #438257; }
+.crowd-meter-moderate .crowd-meter-dots i:nth-child(-n+2) { background: #b8893a; }
+.crowd-meter-busy .crowd-meter-dots i { background: #9c3f36; }
+.crowd-controls { padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--card); }
+.crowd-controls > p { margin: 0 0 14px; color: var(--muted); font-size: 13px; }
+.crowd-controls [role="group"] { display: flex; flex-wrap: wrap; gap: 8px; }
+.crowd-controls .menu-add[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.crowd-controls-time { display: block; margin-top: 12px; color: var(--muted); font-size: 11px; }

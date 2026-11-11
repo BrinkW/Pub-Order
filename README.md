@@ -10,11 +10,13 @@ The goal of the project is to allow students to view available menu items, place
 
 - Student login and authentication
 - View current menu items
+- See the latest crowd level reported by Pub staff
 - Add items to a cart
 - Place food orders
 - View order status
 - Estimated wait times
 - Simple interface designed for Vanderbilt students
+- Staff controls for Low, Moderate, or Busy crowd levels
 
 ## Tech Stack
 

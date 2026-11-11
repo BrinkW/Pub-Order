@@ -5,6 +5,7 @@ import Kitchen from './Kitchen.jsx';
 import { loadMenu, setItemAvailability } from './menu-api.js';
 import { emailStudent, loadOrders, updateOrderStatus } from './order-api.js';
 
+vi.mock('./CrowdMeter.jsx', () => ({ CrowdMeter: () => null, CrowdMeterControls: () => null }));
 vi.mock('./order-api.js', () => ({
   loadOrders: vi.fn(),
   updateOrderStatus: vi.fn(),
