@@ -16,6 +16,15 @@ begin
   end if;
 end $$;
 
+set local role anon;
+do $$
+begin
+  if (select level from public.crowd_status where id = true) <> 'not_reported' then
+    raise exception 'The initial crowd status must be public and not reported';
+  end if;
+end $$;
+reset role;
+
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub": "00000000-0000-4000-8000-00000000000a", "role": "authenticated"}', true);
 do $$
@@ -34,6 +43,11 @@ begin
   if (select status from public.orders where id = v_order) <> 'Received' then
     raise exception 'A student status change was stored';
   end if;
+  begin
+    perform public.set_crowd_level('busy');
+    raise exception 'A student was allowed to change the crowd level';
+  exception when insufficient_privilege then null;
+  end;
 end $$;
 
 select set_config('request.jwt.claims', '{"sub": "00000000-0000-4000-8000-00000000000c", "role": "authenticated"}', true);
@@ -64,6 +78,13 @@ begin
     raise exception 'Kitchen sold-out change was not stored';
   end if;
   perform public.set_item_availability('pub-burger', true);
+  perform public.set_crowd_level('busy');
+  if (select level from public.crowd_status where id = true) <> 'busy' then
+    raise exception 'Kitchen crowd change was not stored';
+  end if;
+  if (select updated_at from public.crowd_status where id = true) is null then
+    raise exception 'Crowd changes must record an update time';
+  end if;
 end $$;
 
 select set_config('request.jwt.claims', '{"sub": "00000000-0000-4000-8000-00000000000b", "role": "authenticated"}', true);

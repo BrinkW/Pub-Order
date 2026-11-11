@@ -42,9 +42,15 @@ def test_public_menu_reads_database_and_maps_fields(client, database):
     assert response.status_code == 200
     assert response.json()[0] == dict(
         id="burger", name="Burger", category="Entry", swipeType="Entry", available=True,
-        description="", portion="", label="", image="",
+        description="", portion="", label="", markers=[], image="",
     )
     database.table.assert_called_once_with('menu_items')
+
+
+def test_menu_returns_every_marker_for_an_item(client, database, catalog):
+    catalog[0]['markers'] = ['Gluten', 'Sesame', 'Features Local Ingredient']
+
+    assert client.get('/menu').json()[0]['markers'] == ['Gluten', 'Sesame', 'Features Local Ingredient']
 
 
 def test_empty_menu(client, database, catalog):
@@ -66,6 +72,12 @@ def test_database_failure_is_sanitized(client, database):
 
 def test_malformed_catalog_fails_closed(client, database, catalog):
     catalog[0]['swipe_type'] = 'Invalid'
+    assert client.get('/menu').status_code == 503
+
+
+def test_unknown_marker_fails_closed(client, database, catalog):
+    catalog[0]['markers'] = ['Made Up Marker']
+
     assert client.get('/menu').status_code == 503
 
 

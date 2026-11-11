@@ -1,6 +1,6 @@
 // Unit tests for reading saved orders from the API (US4, US6). Supabase and fetch are faked.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cancelOrder, loadOrder, loadOrders, updateOrderStatus } from './order-api.js';
+import { cancelOrder, emailStudent, loadOrder, loadOrders, updateOrderStatus } from './order-api.js';
 import { getSupabase } from './supabase.js';
 
 vi.mock('./supabase.js', () => ({ getSupabase: vi.fn() }));
@@ -156,5 +156,27 @@ describe('updateOrderStatus', () => {
     await expect(updateOrderStatus(ID, 'Ready')).resolves.toEqual({ forbidden: true });
     fetch.mockResolvedValueOnce(response({ detail: 'Order not found.' }, 404));
     await expect(updateOrderStatus(ID, 'Ready')).resolves.toEqual({ notFound: true });
+  });
+});
+
+describe('emailStudent', () => {
+  it('asks the backend to send an order notification', async () => {
+    fetch.mockResolvedValueOnce(response({ delivered: true }));
+
+    await expect(emailStudent(ID)).resolves.toEqual({ delivered: true });
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe(`/api/orders/${ID}/notification`);
+    expect(options.method).toBe('POST');
+    expect(options.headers.Authorization).toBe('Bearer test-token');
+  });
+
+  it('reports authorization, missing order, and old orders without email', async () => {
+    fetch.mockResolvedValueOnce(response({}, 403));
+    await expect(emailStudent(ID)).resolves.toEqual({ forbidden: true });
+    fetch.mockResolvedValueOnce(response({}, 404));
+    await expect(emailStudent(ID)).resolves.toEqual({ notFound: true });
+    fetch.mockResolvedValueOnce(response({}, 409));
+    await expect(emailStudent(ID)).resolves.toEqual({ noEmail: true });
   });
 });

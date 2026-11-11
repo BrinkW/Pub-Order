@@ -88,3 +88,23 @@ export async function updateOrderStatus(orderId, status) {
   if (!isOrder(order) || order.id !== orderId) throw new Error(UPDATE_FAILED);
   return { order };
 }
+
+const NOTIFY_FAILED = 'Could not email this student. Please try again.';
+
+// Kitchen staff only. Sends the current order status to the email captured at checkout.
+export async function emailStudent(orderId) {
+  const token = await accessToken();
+  if (!token) return { signInRequired: true };
+  const response = await fetch(`/api/orders/${orderId}/notification`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (response.status === 401) return { signInRequired: true };
+  if (response.status === 403) return { forbidden: true };
+  if (response.status === 404) return { notFound: true };
+  if (response.status === 409) return { noEmail: true };
+  if (!response.ok) throw new Error(NOTIFY_FAILED);
+  const result = await response.json().catch(() => null);
+  if (!result?.delivered) throw new Error(NOTIFY_FAILED);
+  return { delivered: true };
+}

@@ -8,6 +8,11 @@ from app.auth import get_current_user, get_supabase
 
 router = APIRouter()
 SwipeType = Literal["Entry", "Side", "Drink"]
+Marker = Literal[
+    "Alcohol", "Dairy", "Egg", "Fish", "Gluten", "Peanut", "Pork", "Sesame",
+    "Shellfish", "Soy", "Tree Nut", "Features Local Ingredient", "Halal", "Kosher",
+    "Vegan", "Vegetarian",
+]
 StrictQuantity = Annotated[int, Field(strict=True, ge=1, le=10)]
 
 
@@ -19,6 +24,7 @@ class MenuItem(BaseModel):
     description: str = ""
     portion: str = ""
     label: str = ""
+    markers: list[Marker] = Field(default_factory=list, max_length=16)
     image: str = ""
     available: bool
 
@@ -26,7 +32,7 @@ class MenuItem(BaseModel):
 def load_menu() -> list[MenuItem]:
     try:
         response = get_supabase().table("menu_items").select(
-            "id,name,category,swipe_type,description,portion,label,image,available"
+            "id,name,category,swipe_type,description,portion,label,markers,image,available"
         ).order("sort_order").execute()
         rows = cast(list[dict[str, Any]], response.data)
         return [MenuItem.model_validate({**row, "swipeType": row["swipe_type"]}) for row in rows]

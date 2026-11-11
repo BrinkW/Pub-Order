@@ -7,7 +7,10 @@ export async function loadMenu(signal) {
   const items = await response.json();
   if (!Array.isArray(items) || items.some((item) => !item || typeof item.id !== 'string' || !item.id ||
     typeof item.name !== 'string' || typeof item.category !== 'string' || !SWIPE_TYPES.includes(item.swipeType) ||
-    typeof item.available !== 'boolean') || new Set(items.map((item) => item.id)).size !== items.length) {
+    typeof item.available !== 'boolean' || (item.markers !== undefined && (!Array.isArray(item.markers) ||
+      item.markers.some((marker) => typeof marker !== 'string'))) ||
+    new Set(item.markers || []).size !== (item.markers || []).length) ||
+    new Set(items.map((item) => item.id)).size !== items.length) {
     throw new Error('The menu could not be loaded. Please try again.');
   }
   return items;
