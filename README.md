@@ -140,7 +140,7 @@ One-time setup:
 1. In Render, choose **New → Blueprint**, pick this repository, and enter `SUPABASE_URL` and `SUPABASE_KEY` when asked. Use the public anon/publishable key, never the service-role key. For the kitchen's **Email student** button, also enter `RESEND_API_KEY` and `NOTIFICATION_FROM_EMAIL`; leave them blank to run without email. Render only asks for these when the Blueprint is created; change them later under the service's **Environment** tab.
 2. In the hosted Supabase project, under **Authentication → URL Configuration**, set **Site URL** to the Render URL and add it to **Redirect URLs** (keep `http://localhost:5173` for development). Otherwise sign-up emails link to localhost.
 3. Make sure every file in `supabase/migrations/` has been applied to the hosted project, in filename order.
-4. To use the kitchen view, set an account's `role` to `kitchen` in the `profiles` table.
+4. To use the kitchen view, set an account's `role` to `kitchen` in the `profiles` table (table editor, or `update public.profiles set role = 'kitchen' where user_id = (select id from auth.users where email = '<staff email>');` in the SQL editor). This is the only way to get kitchen access: every sign-up is a student, whatever its email (SEC-01).
 
 The Supabase keys live only in Render's dashboard. GitHub Actions never sees them, because CI tests against a throwaway local Supabase.
 

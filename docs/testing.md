@@ -560,7 +560,7 @@ The backend CI job runs this script against the local test database, after `supa
 
 ## Database: [supabase/tests/roles.sql](../supabase/tests/roles.sql)
 
-Runs the same way, after every migration. It checks the student and kitchen roles, that only the kitchen can change an order's status or mark items sold out, and for US23 that a student can cancel their own Received order while the kitchen can neither reopen nor cancel it. It also checks the grant on `cancel_order`: `anon` and `public` cannot execute it and `authenticated` can. Calling it as `anon` would fail with 42501 even without the revoke, so only the grant check catches a missing revoke.
+Runs the same way, after every migration. For SEC-01 it checks that every new account is a student, including one registered as `kitchen@puborder.test` (which used to become kitchen staff), and grants the kitchen role with a direct `profiles` update, the only way staff get it. It then checks the student and kitchen roles, that only the kitchen can change an order's status or mark items sold out, and for US23 that a student can cancel their own Received order while the kitchen can neither reopen nor cancel it. It also checks the grant on `cancel_order`: `anon` and `public` cannot execute it and `authenticated` can. Calling it as `anon` would fail with 42501 even without the revoke, so only the grant check catches a missing revoke.
 
 ## E2E (Playwright)
 
