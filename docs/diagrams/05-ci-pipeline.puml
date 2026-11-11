@@ -39,7 +39,9 @@ package "security job (parallel; every scan runs)" {
 
 rectangle "<b>e2e job</b>\n\nBrowser tests\n(Playwright)\nbrowser → Vite →\nFastAPI → Supabase" as E1
 
-rectangle "<b>deliver job</b>\nonly on push to main\nor a sprint3 tag\n\nbuild frontend,\npackage versioned zip,\nsmoke-test it,\npublish artifact\n(+ Release on tag)" as D1
+rectangle "<b>deliver job</b>\nonly on push to main\nor a sprint3 tag\n\nbuild frontend,\npackage versioned zip,\nsmoke-test it and\nthe Docker image,\npublish artifact\n(+ Release on tag)" as D1
+
+rectangle "<b>Render (staging)</b>\noutside GitHub Actions\n\nbuilds the Dockerfile\nand deploys main\nonce its checks pass\n(HTTPS)" as R1
 
 B1 --> B2
 B2 --> B3
@@ -59,6 +61,7 @@ F6 --> E1
 F6 -[hidden]-> D1
 E1 -[norank]-> D1
 S4 -[norank]-> D1
+D1 ..> R1 : checks pass on main
 
 legend bottom
   Each job's steps run in order and stop at the first failure; unit and integration tests are separate steps.
@@ -68,5 +71,6 @@ legend bottom
   Integration and E2E tests use a throwaway local Supabase, never the hosted project.
   Coverage gate: 70% of branches on both sides (the spec's minimum is 50%).
   deliver output: pub-order-0.3.<run>-<commit>.zip, kept 90 days; a sprint3 tag also creates a GitHub Release.
+  Staging: Render (render.yaml) deploys main only after its GitHub checks pass; Supabase keys live in Render, not GitHub.
 endlegend
 @enduml
