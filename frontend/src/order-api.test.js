@@ -108,12 +108,29 @@ describe('cancelOrder', () => {
     expect(options.headers.Authorization).toBe('Bearer test-token');
   });
 
-  it.each([[401, { signInRequired: true }], [404, { notFound: true }], [409, { tooLate: true }]])(
+  it.each([[401, { signInRequired: true }], [404, { notFound: true }]])(
     'reports a %i without throwing', async (status, expected) => {
       fetch.mockResolvedValueOnce(response({ detail: 'no' }, status));
       await expect(cancelOrder(ID)).resolves.toEqual(expected);
     },
   );
+
+  it('passes on the server’s reason when it is too late to cancel', async () => {
+    fetch.mockResolvedValueOnce(response({ detail: 'This order is ready for pickup, so it can’t be cancelled.' }, 409));
+    await expect(cancelOrder(ID)).resolves.toEqual({
+      tooLate: true, message: 'This order is ready for pickup, so it can’t be cancelled.',
+    });
+  });
+
+  it('accepts a cancel confirmed with only the id and status', async () => {
+    fetch.mockResolvedValueOnce(response({ id: ID, status: 'Cancelled' }));
+    await expect(cancelOrder(ID)).resolves.toEqual({ order: { id: ID, status: 'Cancelled' } });
+  });
+
+  it('rejects a short reply that does not confirm the cancel', async () => {
+    fetch.mockResolvedValueOnce(response({ id: ID, status: 'Received' }));
+    await expect(cancelOrder(ID)).rejects.toThrow('Could not cancel this order. Please try again.');
+  });
 
   it('throws a friendly error when the server fails', async () => {
     fetch.mockResolvedValueOnce(response({ detail: 'down' }, 503));

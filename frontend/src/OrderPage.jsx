@@ -38,6 +38,7 @@ export default function OrderPage({ orderId, initialOrder, justPlaced, email, on
       const saved = result.order;
       if (lastStatus.current && lastStatus.current !== saved.status) {
         setAnnouncement(`Your order is now ${stepLabel(saved.status).toLowerCase()}.`);
+        setCancelError('');
       }
       lastStatus.current = saved.status;
       setOrder(saved);
@@ -60,14 +61,15 @@ export default function OrderPage({ orderId, initialOrder, justPlaced, email, on
   }, [refresh]);
 
   // Check for a newer status while the order is still open and the tab is visible.
+  // Pause while a cancel is in flight, so a poll can't overtake it.
   const open = state === 'ready' && isOpenOrder(order);
   useEffect(() => {
-    if (!open) return undefined;
+    if (!open || cancelling) return undefined;
     const poll = () => { if (!document.hidden) refresh({ quiet: true }); };
     const timer = setInterval(poll, STATUS_POLL_MS);
     document.addEventListener('visibilitychange', poll);
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', poll); };
-  }, [open, refresh]);
+  }, [open, cancelling, refresh]);
 
   // A student with the tab in the background can still see that pickup is ready.
   const ready = order?.status === 'Ready';
@@ -82,19 +84,27 @@ export default function OrderPage({ orderId, initialOrder, justPlaced, email, on
 
   async function cancel() {
     if (!window.confirm('Cancel this order? The kitchen will not make it.')) return;
+    // Become the newest request and stop any status read in flight, so an older
+    // snapshot can't land afterwards and undo the cancel on screen.
+    const request = ++latestRequest.current;
+    controller.current?.abort();
+    setRefreshing(false);
     setCancelling(true);
     setCancelError('');
     try {
       const result = await cancelOrder(orderId);
+      if (request !== latestRequest.current) return;
       if (result.signInRequired) { setState('signIn'); return; }
       if (result.notFound) { setOrder(null); setState('notFound'); return; }
       if (result.tooLate) {
-        setCancelError('The kitchen has already started this order, so it can’t be cancelled.');
         await refresh({ quiet: true });
+        // Shown after the refresh, so it stays until the status changes again.
+        setCancelError(result.message || 'The kitchen has already started this order, so it can’t be cancelled.');
         return;
       }
       lastStatus.current = result.order.status;
-      setOrder(result.order);
+      // The server may confirm the cancel without the full order; keep the details we have.
+      setOrder((current) => ({ ...current, ...result.order }));
       setAnnouncement('Your order was cancelled.');
     } catch (failure) {
       setCancelError(failure.message);

@@ -2,7 +2,7 @@
 // The backend returns 404 for an order that is missing or belongs to someone else, so the
 // page cannot tell the two apart and never reveals another student's order.
 import { getSupabase } from './supabase.js';
-import { isOrder, isOrderId } from './order-status.js';
+import { CANCELLED, isOrder, isOrderId } from './order-status.js';
 
 const LOAD_FAILED = 'Could not load your order. Please try again.';
 const LIST_FAILED = 'Could not load your orders. Please try again.';
@@ -57,10 +57,15 @@ export async function cancelOrder(orderId) {
   });
   if (response.status === 401) return { signInRequired: true };
   if (response.status === 404) return { notFound: true };
-  if (response.status === 409) return { tooLate: true };
+  if (response.status === 409) {
+    const body = await response.json().catch(() => null);
+    return { tooLate: true, message: typeof body?.detail === 'string' ? body.detail : undefined };
+  }
   if (!response.ok) throw new Error(CANCEL_FAILED);
   const order = await response.json().catch(() => null);
-  if (!isOrder(order) || order.id !== orderId) throw new Error(CANCEL_FAILED);
+  // If the server couldn't read the order back after cancelling, it confirms with just the id and status.
+  const confirmed = order?.id === orderId && order?.status === CANCELLED;
+  if (!(isOrder(order) || confirmed) || order.id !== orderId) throw new Error(CANCEL_FAILED);
   return { order };
 }
 

@@ -265,6 +265,57 @@ describe('US23 cancelling an order', () => {
     expect(screen.queryByRole('button', { name: 'Cancel order' })).not.toBeInTheDocument();
   });
 
+  it('keeps the cancel when an older status read finishes after it', async () => {
+    let finishSlow;
+    loadOrder.mockReturnValueOnce(new Promise((resolve) => { finishSlow = resolve; }));
+    cancelOrder.mockResolvedValue({ order: saved('Cancelled') });
+    renderPage({ initialOrder: saved() });
+    await vi.waitFor(() => expect(loadOrder).toHaveBeenCalledTimes(1));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+    await screen.findByRole('heading', { name: 'Cancelled' });
+    await act(async () => finishSlow({ order: saved('Received') }));
+
+    expect(screen.getByRole('heading', { name: 'Cancelled' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancel order' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the order details when the server confirms the cancel without them', async () => {
+    cancelOrder.mockResolvedValue({ order: { id: ID, status: 'Cancelled' } });
+    renderPage({ initialOrder: saved() });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+
+    expect(await screen.findByRole('heading', { name: 'Cancelled' })).toBeInTheDocument();
+    expect(screen.getByText('Burger')).toBeInTheDocument();
+  });
+
+  it('shows the server’s reason when the order is too far along to cancel', async () => {
+    cancelOrder.mockResolvedValue({ tooLate: true, message: 'This order is ready for pickup, so it can’t be cancelled.' });
+    renderPage({ initialOrder: saved() });
+    await vi.waitFor(() => expect(loadOrder).toHaveBeenCalledTimes(1));
+    loadOrder.mockResolvedValue({ order: saved('Ready') });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+
+    expect(await screen.findByText('This order is ready for pickup, so it can’t be cancelled.')).toBeInTheDocument();
+  });
+
+  it('clears the too-late message once the order moves on', async () => {
+    cancelOrder.mockResolvedValue({ tooLate: true });
+    renderPage({ initialOrder: saved() });
+    await vi.waitFor(() => expect(loadOrder).toHaveBeenCalledTimes(1));
+    loadOrder.mockResolvedValue({ order: saved('Preparing') });
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+    await screen.findByText(/already started this order/);
+
+    loadOrder.mockResolvedValue({ order: saved('Ready') });
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
+
+    await screen.findByRole('heading', { level: 2, name: 'Ready for pickup' });
+    expect(screen.queryByText(/already started this order/)).not.toBeInTheDocument();
+  });
+
   it('offers no cancel once the kitchen has started', async () => {
     loadOrder.mockResolvedValue({ order: saved('Preparing') });
     renderPage({ initialOrder: saved('Preparing') });
