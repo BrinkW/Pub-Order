@@ -19,6 +19,8 @@ Every confirmed finding from the Sprint 4 audit, in the Appendix C format. Sever
 
 ## Notes on the fixes
 
+All three fixes follow [ADR-001](adr-001.md): security rules are enforced in the database, because sign-up and direct database calls never pass through our API.
+
 - **SEC-01:** migration `202611120001_kitchen_role_by_grant.sql` makes every new account a student. Kitchen access now comes only from a deliberate `profiles` update (README, deploy step 4). Existing kitchen accounts keep their role.
 - **SEC-02:** migration `202611120002_vanderbilt_signup.sql` adds a database trigger that refuses any account, or email change, outside `@vanderbilt.edu`. It has to be in the database, because sign-up never passes through our backend. The sign-up form says so before trying. Proving the student owns the address is the hosted project's **Confirm email** setting (README, deploy step 2), which a migration can't set.
 - **SEC-03:** migration `202611120003_order_limits.sql` limits each student, inside `place_order`, to 3 orders in progress and 5 orders per 10 minutes, and the API answers 429 with the reason. Because the check is in the database, it also covers direct calls (SEC-06). A per-student lock stops two simultaneous requests from both slipping under a limit.
