@@ -126,10 +126,12 @@ Covers `POST /orders/{id}/cancel` in [app/orders.py](../backend/app/orders.py) (
 | Test | What it checks |
 |---|---|
 | [`test_student_can_cancel_their_order`](../backend/tests/test_cancel_order.py#L15) | Calls `cancel_order` with the order id and returns the cancelled order. |
-| [`test_cancel_errors_are_mapped`](../backend/tests/test_cancel_order.py#L33) ×3 | Not found (or not yours) gives 404, already started gives 409, anything else gives 503, without database details. |
-| [`test_cancel_requires_a_token`](../backend/tests/test_cancel_order.py#L42) | Without a token the request gets 401 and nothing reaches the database. |
-| [`test_cancel_rejects_a_malformed_order_id`](../backend/tests/test_cancel_order.py#L49) | A malformed id gives 422. |
-| [`test_kitchen_cannot_reopen_a_cancelled_order`](../backend/tests/test_cancel_order.py#L56) | A kitchen status change to a cancelled order gives 409. |
+| [`test_cancel_errors_are_mapped`](../backend/tests/test_cancel_order.py#L34) ×4 | Signed out (an expired token) gives 401, not found (or not yours) gives 404, already started gives 409, anything else gives 503, without database details. |
+| [`test_too_late_message_matches_the_order_status`](../backend/tests/test_cancel_order.py#L51) ×3 | The 409 message matches the status the database reports: started, ready for pickup, or picked up. |
+| [`test_cancel_still_succeeds_when_reading_the_order_back_fails`](../backend/tests/test_cancel_order.py#L61) ×2 | **Failure path:** once the cancel is saved, a failed or empty read-back still returns 200 with the Cancelled status. |
+| [`test_cancel_requires_a_token`](../backend/tests/test_cancel_order.py#L77) | Without a token the request gets 401 and nothing reaches the database. |
+| [`test_cancel_rejects_a_malformed_order_id`](../backend/tests/test_cancel_order.py#L84) | A malformed id gives 422. |
+| [`test_kitchen_cannot_reopen_a_cancelled_order`](../backend/tests/test_cancel_order.py#L91) | A kitchen status change to a cancelled order gives 409. |
 
 ### Settings: [test_config.py](../backend/tests/test_config.py)
 
@@ -452,8 +454,11 @@ Covers [order-api.js](../frontend/src/order-api.js) (US4, US6). Supabase and `fe
 | [asks a guest or an expired session to sign in](../frontend/src/order-api.test.js#L84) | No session or a 401 asks for sign-in. |
 | [throws when the server fails or sends something that is not a list of orders](../frontend/src/order-api.test.js#L91) | A server error or a malformed list throws a friendly error. |
 | [posts the cancel with the login token](../frontend/src/order-api.test.js#L100) | **US23:** `POST /api/orders/{id}/cancel` carries `Bearer <token>` and returns the cancelled order. |
-| [reports a %i without throwing](../frontend/src/order-api.test.js#L112) ×3 | 401 asks for sign-in, 404 is not found, 409 means the kitchen already started. |
-| [throws a friendly error when the server fails](../frontend/src/order-api.test.js#L118) | A 503 becomes "Could not cancel this order. Please try again." |
+| [reports a %i without throwing](../frontend/src/order-api.test.js#L111) ×2 | 401 asks for sign-in, 404 is not found. |
+| [passes on the server’s reason when it is too late to cancel](../frontend/src/order-api.test.js#L118) | A 409 returns "too late" with the server's message. |
+| [accepts a cancel confirmed with only the id and status](../frontend/src/order-api.test.js#L125) | A short `{id, status: Cancelled}` reply counts as a cancel. |
+| [rejects a short reply that does not confirm the cancel](../frontend/src/order-api.test.js#L130) | A short reply with any other status is a failure. |
+| [throws a friendly error when the server fails](../frontend/src/order-api.test.js#L135) | A 503 becomes "Could not cancel this order. Please try again." |
 
 ### Order confirmation and pickup tracking: [OrderPage.test.jsx](../frontend/src/OrderPage.test.jsx)
 
@@ -480,7 +485,11 @@ Covers [OrderPage.jsx](../frontend/src/OrderPage.jsx) (US4, US6). The API module
 | [cancels a Received order after the student confirms](../frontend/src/OrderPage.test.jsx#L234) | **US23:** **Cancel order** asks to confirm, then shows Cancelled without the progress steps or the button. |
 | [does nothing when the student changes their mind](../frontend/src/OrderPage.test.jsx#L246) | Dismissing the confirmation sends nothing. |
 | [explains when the kitchen started first and shows the new status](../frontend/src/OrderPage.test.jsx#L255) | **US23 failure path:** a 409 explains why and shows the latest status. |
-| [offers no cancel once the kitchen has started](../frontend/src/OrderPage.test.jsx#L268) | A Preparing order has no **Cancel order** button. |
+| [keeps the cancel when an older status read finishes after it](../frontend/src/OrderPage.test.jsx#L268) | **US23 regression:** a status read that started before the cancel can't bring back "Waiting for the kitchen" or the button. |
+| [keeps the order details when the server confirms the cancel without them](../frontend/src/OrderPage.test.jsx#L283) | A short cancel reply keeps the items on screen. |
+| [shows the server’s reason when the order is too far along to cancel](../frontend/src/OrderPage.test.jsx#L293) | The 409 message from the server is shown. |
+| [clears the too-late message once the order moves on](../frontend/src/OrderPage.test.jsx#L304) | The "too late" alert goes away when the status changes again. |
+| [offers no cancel once the kitchen has started](../frontend/src/OrderPage.test.jsx#L319) | A Preparing order has no **Cancel order** button. |
 
 ### My orders: [MyOrders.test.jsx](../frontend/src/MyOrders.test.jsx)
 
@@ -488,11 +497,12 @@ Covers [MyOrders.jsx](../frontend/src/MyOrders.jsx) (US6). The API module is fak
 
 | Test | What it checks |
 |---|---|
-| [separates orders still in progress from ones already picked up](../frontend/src/MyOrders.test.jsx#L28) | Orders are grouped into "In progress" and "Picked up" with their status. |
-| [opens an order from the list](../frontend/src/MyOrders.test.jsx#L39) | **View** opens that order. |
-| [points a student with no orders back to the menu](../frontend/src/MyOrders.test.jsx#L48) | An empty list links to the menu. |
-| [asks a signed-out student to sign in](../frontend/src/MyOrders.test.jsx#L57) | A guest is asked to sign in. |
-| [shows the error and loads again on retry or refresh](../frontend/src/MyOrders.test.jsx#L66) | **Failure path:** a failed load shows the error; **Try again** and **Refresh list** reload. |
+| [separates orders still in progress from ones already picked up](../frontend/src/MyOrders.test.jsx#L28) | Orders are grouped into "In progress" and "Past orders" with their status. |
+| [never files a cancelled order under "Picked up"](../frontend/src/MyOrders.test.jsx#L39) | **US23 regression:** a cancelled order is listed under "Past orders" with a Cancelled chip; there is no "Picked up" heading. |
+| [opens an order from the list](../frontend/src/MyOrders.test.jsx#L49) | **View** opens that order. |
+| [points a student with no orders back to the menu](../frontend/src/MyOrders.test.jsx#L58) | An empty list links to the menu. |
+| [asks a signed-out student to sign in](../frontend/src/MyOrders.test.jsx#L67) | A guest is asked to sign in. |
+| [shows the error and loads again on retry or refresh](../frontend/src/MyOrders.test.jsx#L76) | **Failure path:** a failed load shows the error; **Try again** and **Refresh list** reload. |
 
 ### Page switching: [App.test.jsx](../frontend/src/App.test.jsx)
 
@@ -547,6 +557,10 @@ Checks the dev-server settings the frontend needs to reach the backend. A wrong 
 ## Database: [supabase/tests/menu_items.sql](../supabase/tests/menu_items.sql)
 
 The backend CI job runs this script against the local test database, after `supabase start` has applied [the menu migration](../supabase/migrations/202610120001_menu_items.sql). It checks that the 22 seed items exist (11 counted as entrées), that invalid swipe types are refused, that row-level security is on, and that guests and students can read the menu but not change it. It runs inside a transaction, so nothing is left behind.
+
+## Database: [supabase/tests/roles.sql](../supabase/tests/roles.sql)
+
+Runs the same way, after every migration. It checks the student and kitchen roles, that only the kitchen can change an order's status or mark items sold out, and for US23 that a student can cancel their own Received order while the kitchen can neither reopen nor cancel it. It also checks the grant on `cancel_order`: `anon` and `public` cannot execute it and `authenticated` can. Calling it as `anon` would fail with 42501 even without the revoke, so only the grant check catches a missing revoke.
 
 ## E2E (Playwright)
 
