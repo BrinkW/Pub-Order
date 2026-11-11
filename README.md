@@ -137,7 +137,7 @@ docker compose up --build    # http://localhost:8000
 
 One-time setup:
 
-1. In Render, choose **New → Blueprint**, pick this repository, and enter `SUPABASE_URL` and `SUPABASE_KEY` when asked. Use the public anon/publishable key, never the service-role key. Render only asks for these when the Blueprint is created; change them later under the service's **Environment** tab.
+1. In Render, choose **New → Blueprint**, pick this repository, and enter `SUPABASE_URL` and `SUPABASE_KEY` when asked. Use the public anon/publishable key, never the service-role key. For the kitchen's **Email student** button, also enter `RESEND_API_KEY` and `NOTIFICATION_FROM_EMAIL`; leave them blank to run without email. Render only asks for these when the Blueprint is created; change them later under the service's **Environment** tab.
 2. In the hosted Supabase project, under **Authentication → URL Configuration**, set **Site URL** to the Render URL and add it to **Redirect URLs** (keep `http://localhost:5173` for development). Otherwise sign-up emails link to localhost.
 3. Make sure every file in `supabase/migrations/` has been applied to the hosted project, in filename order.
 4. To use the kitchen view, set an account's `role` to `kitchen` in the `profiles` table.

@@ -15,3 +15,8 @@ services:
         sync: false
       - key: SUPABASE_KEY
         sync: false
+      # Optional: kitchen "Email student" notifications through Resend. Server-side only.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: NOTIFICATION_FROM_EMAIL
+        sync: false
