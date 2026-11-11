@@ -91,3 +91,5 @@ Rows follow the Sprint 4 Appendix A checklist, which uses the OWASP Top 10:2021 
 3. **SEC-03: no limit on orders per student (T9, Medium) — [#23](https://github.com/hamayunrz/Pub-Order/issues/23).** Cap open orders per student inside `place_order` and rate-limit `POST /orders`, with a test that the extra order is refused.
 
 Each is tracked as a GitHub issue (#21, #22, #23) labelled `security` in the `Sprint4` milestone.
+
+Every finding (SEC-01 to SEC-10) with its severity, fix pull request, regression test and status is in [findings.md](findings.md).
