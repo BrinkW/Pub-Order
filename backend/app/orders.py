@@ -23,7 +23,10 @@ from app.menu import CheckoutRequest, review_cart
 
 router = APIRouter()
 
-ORDER_COLUMNS = "id,status,swipes,created_at,order_items(menu_item_id,name,swipe_type,quantity,customization)"
+ORDER_COLUMNS = (
+    "id,status,swipes,created_at,student_email,"
+    "order_items(menu_item_id,name,swipe_type,quantity,customization)"
+)
 TYPE_ORDER = ["Entry", "Side", "Drink"]
 INVALID_ORDER = "22023"  # errcode raised by place_order() for a meal it won't accept
 
@@ -87,7 +90,7 @@ def order_json(row: dict[str, Any]) -> dict[str, Any]:
         row.get("order_items") or [],
         key=lambda item: (TYPE_ORDER.index(item["swipe_type"]), item["name"]),
     )
-    return {
+    result = {
         "id": row["id"],
         "status": row["status"],
         "swipes": row["swipes"],
@@ -98,6 +101,9 @@ def order_json(row: dict[str, Any]) -> dict[str, Any]:
             for item in items
         ],
     }
+    if row.get("student_email"):
+        result["studentEmail"] = row["student_email"]
+    return result
 
 
 def fetch_order(db: SyncPostgrestClient, value: str, column: str = "id") -> dict[str, Any] | None:

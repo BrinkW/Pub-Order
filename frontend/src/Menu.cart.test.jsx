@@ -7,6 +7,8 @@ import { CART_STORAGE_KEY, MAX_SWIPES } from './cart.js';
 import Menu from './Menu.jsx';
 import { MENU_ITEMS } from './menu-data.js';
 
+vi.mock('./CrowdMeter.jsx', () => ({ CrowdMeter: () => null, CrowdMeterControls: () => null }));
+
 const catalog = MENU_ITEMS.map((item) => ({ ...item, available: true }));
 
 beforeEach(() => {

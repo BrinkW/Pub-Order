@@ -69,6 +69,7 @@ export function formatPlacedAt(createdAt, now = new Date()) {
 // error state instead of a half-drawn page.
 export function isOrder(value) {
   return Boolean(value) && isOrderId(value.id) && ORDER_STATUSES.includes(value.status) &&
+    (value.studentEmail === undefined || typeof value.studentEmail === 'string') &&
     Number.isInteger(value.swipes) && value.swipes > 0 && Array.isArray(value.items) &&
     value.items.every((item) => item && typeof item.name === 'string' && Number.isInteger(item.quantity));
 }
