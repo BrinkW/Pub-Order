@@ -5,6 +5,7 @@ import Checkout from './Checkout.jsx';
 import App from './App.jsx';
 import { CART_STORAGE_KEY } from './cart.js';
 import { getSupabase } from './supabase.js';
+vi.mock('./CrowdMeter.jsx', () => ({ CrowdMeter: () => null, CrowdMeterControls: () => null }));
 vi.mock('./supabase.js', () => ({ getSupabase: vi.fn() }));
 const catalog = [
   { id: 'burger', name: 'Burger', category: 'Grill Main', swipeType: 'Entry', available: true, description: 'Grilled', label: '' },
@@ -80,6 +81,10 @@ it('opens a nutrition card from a menu item', async () => {
 });
 it('rejects malformed menu responses', async () => {
   fetch.mockResolvedValueOnce(response([{ id: 'invalid' }])); render(<Menu />);
+  expect(await screen.findByRole('alert')).toHaveTextContent('could not be loaded');
+});
+it('rejects duplicate or malformed marker lists', async () => {
+  fetch.mockResolvedValueOnce(response([{ ...catalog[0], markers: ['Gluten', 'Gluten'] }])); render(<Menu />);
   expect(await screen.findByRole('alert')).toHaveTextContent('could not be loaded');
 });
 it('cannot add unavailable items', async () => {

@@ -142,7 +142,11 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies (package-lock.json)
         run: npm ci
-      - run: npx playwright install --with-deps chromium
+      # GitHub's hosted Ubuntu image already includes Chromium's shared-library
+      # dependencies. Avoid an apt refresh here: a transient Ubuntu mirror DNS
+      # failure would otherwise fail the suite before any project test runs.
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
       - uses: supabase/setup-cli@v3
         with:
           version: 2.121.0

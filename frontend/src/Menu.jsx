@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import Checkout from './Checkout.jsx';
+import { CrowdMeter } from './CrowdMeter.jsx';
 import CustomizeDialog from './CustomizeDialog.jsx';
 import NutritionDialog from './NutritionDialog.jsx';
 import { loadMenu } from './menu-api.js';
@@ -8,6 +9,11 @@ import { CART_STORAGE_KEY, MAX_SWIPES, emptyCart, filterMenu, getCartSummary, re
 
 const MENU_IMAGE_BASE = '/images/menu/';
 const IMAGE_FALLBACK = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 300'%3E%3Crect width='400' height='300' fill='%23f2ecdf'/%3E%3Ctext x='50%25' y='50%25' font-family='sans-serif' font-size='18' fill='%23a89f8c' text-anchor='middle' dominant-baseline='middle'%3ENo image%3C/text%3E%3C/svg%3E";
+const PREFERENCE_MARKERS = new Set(['Features Local Ingredient', 'Halal', 'Kosher', 'Vegan', 'Vegetarian']);
+
+function markersFor(item) {
+  return item.markers?.length ? item.markers : (item.label ? [item.label] : []);
+}
 
 function initialCart() {
   try { return restoreCart(window.localStorage.getItem(CART_STORAGE_KEY)); }
@@ -172,6 +178,7 @@ export default function Menu({ email, onBack, onViewOrders, onOrderPlaced }) {
           <div className="menu-demo-note"><strong>Meal swipe menu</strong><span>Review your meal before ordering. One entrée, side, and drink per swipe.</span></div>
         </section>
 
+        <CrowdMeter />
         {checkout ? <Checkout cart={cart} catalog={catalog} onBack={showCart} onSignIn={onBack} onAcceptChanges={acceptChanges} onEnsureCheckoutKey={ensureCheckoutKey} onOrderPlaced={orderPlaced} /> : <div className="menu-layout">
           <section className="menu-catalog" aria-label="Food and drinks">
             {loadState === 'ready' && <button className="menu-text-button" onClick={() => setAttempt((n) => n + 1)}>Refresh menu</button>}
@@ -198,7 +205,15 @@ export default function Menu({ email, onBack, onViewOrders, onOrderPlaced }) {
                         onError={(event) => { event.currentTarget.onerror = null; event.currentTarget.src = IMAGE_FALLBACK; }}
                       />
                     </div>
-                    <div className="menu-item-top"><span className="menu-item-category">{item.category}</span>{item.label ? <span className="menu-item-label">{item.label}</span> : null}</div>
+                    <div className="menu-item-top">
+                      <span className="menu-item-category">{item.category}</span>
+                      <div className="menu-item-markers">
+                        {markersFor(item).map((marker) => <span
+                          key={marker}
+                          className={`menu-item-label ${PREFERENCE_MARKERS.has(marker) ? 'menu-item-label-preference' : 'menu-item-label-allergen'}`}
+                        >{marker}</span>)}
+                      </div>
+                    </div>
                     <div className="menu-item-heading">
                       <h2 id={`name-${item.id}`}>{item.name}</h2>
                       <button type="button" className="menu-info" aria-label={`Nutrition facts for ${item.name}`} onClick={() => setDetails(item)}>

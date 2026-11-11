@@ -10,11 +10,16 @@ The goal of the project is to allow students to view available menu items, place
 
 - Student login and authentication
 - View current menu items
+- See Pub dietary-preference and allergen markers on each menu item
+- See the latest crowd level reported by Pub staff
 - Add items to a cart
 - Place food orders
 - View order status
 - Estimated wait times
 - Simple interface designed for Vanderbilt students
+- Staff controls for Low, Moderate, or Busy crowd levels
+
+Menu markers were verified against Vanderbilt NetNutrition for The Pub at Overcup Oak on November 11, 2026. Dining data can change; students with dietary restrictions should confirm current information with Campus Dining staff.
 
 ## Tech Stack
 
@@ -44,6 +49,8 @@ docs/diagrams/  UML diagrams
 First, copy `.env.example` to `.env` in the repo root and fill in the Supabase URL and anon key.
 
 Before using the app, apply the migrations in `supabase/migrations/` once, in filename order, to the intended Supabase project: `202610120001_menu_items.sql` (the menu) and then `202610180001_orders.sql` (orders). See [Hamayun’s US1/US2 walkthrough](docs/hamayun-us1-us2.md) for setup, the meal-swipe rules, API contract, tests, and the US3 handoff.
+
+Kitchen staff can email a student the current status of an order. Apply the order-email migration, then set `RESEND_API_KEY` and `NOTIFICATION_FROM_EMAIL` in the backend environment. The sender must be verified by Resend; the API key remains server-side and must never be committed.
 
 **Orders API (US3).** Signed-in students place orders with `POST /api/orders` (the checkout review body plus an `idempotencyKey`), and read their own orders with `GET /api/orders` and `GET /api/orders/{id}`. Orders are saved only through the `place_order` database function, which re-checks the meal and stores the order and its items together; retrying with the same key returns the same order. New orders start as `Received`; the status column also allows `Preparing`, `Ready` and `Collected` for US5 and US6.
 

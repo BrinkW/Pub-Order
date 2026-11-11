@@ -42,7 +42,7 @@ reset role;
 
 -- Student A places orders only through place_order().
 set local role authenticated;
-select set_config('request.jwt.claims', '{"sub": "00000000-0000-4000-8000-00000000000a", "role": "authenticated"}', true);
+select set_config('request.jwt.claims', '{"sub": "00000000-0000-4000-8000-00000000000a", "role": "authenticated", "email": "order-test-a@example.com"}', true);
 do $$
 declare
   v_meal jsonb := '[{"id": "pub-burger", "quantity": 1}, {"id": "straight-cut-fries", "quantity": 1}, {"id": "sweet-tea", "quantity": 1}]';
@@ -56,6 +56,9 @@ begin
   end if;
   if (select status from public.orders where id = v_first) <> 'Received' then
     raise exception 'New orders must start as Received';
+  end if;
+  if (select student_email from public.orders where id = v_first) is distinct from 'order-test-a@example.com' then
+    raise exception 'The ordering student email was not captured';
   end if;
   if (select count(*) from public.order_items where order_id = v_first) <> 3 then
     raise exception 'Expected three stored order items';
