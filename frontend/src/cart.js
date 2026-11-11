@@ -104,7 +104,7 @@ export function getCartSummary(cart, catalog) {
 export function filterMenu(query, category, catalog) {
   const search = query.trim().toLowerCase();
   return catalog.filter((item) => (category === 'All' || item.category === category) &&
-    `${item.name} ${item.description} ${item.label}`.toLowerCase().includes(search));
+    `${item.name} ${item.description} ${item.label} ${(item.markers || []).join(' ')}`.toLowerCase().includes(search));
 }
 
 export function checkoutErrors(cart, catalog) {
