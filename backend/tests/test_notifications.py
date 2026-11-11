@@ -94,3 +94,26 @@ def test_email_delivery_uses_server_side_resend_configuration(monkeypatch):
     assert request["json"]["to"] == ["student@vanderbilt.edu"]
     assert "READY" not in request["json"]["subject"]
     assert "Ready" in request["json"]["subject"]
+
+
+def test_cancelled_order_email_says_it_was_cancelled(monkeypatch):
+    request = {}
+
+    class SuccessfulResponse:
+        def raise_for_status(self):
+            return None
+
+    def post(url, **kwargs):
+        request.update(url=url, **kwargs)
+        return SuccessfulResponse()
+
+    monkeypatch.setattr(
+        notifications,
+        "get_settings",
+        lambda: Settings("", "", "server-only-key", "Pub Order <orders@example.com>"),
+    )
+    monkeypatch.setattr(notifications.httpx, "post", post)
+
+    notifications.deliver_order_email("student@vanderbilt.edu", {**ORDER, "status": "Cancelled"})
+
+    assert request["json"]["text"].startswith("Your Pub order was cancelled")
