@@ -19,7 +19,7 @@ Tests marked "×N" run once per input listed.
 
 **Integration tests never touch the team's hosted Supabase.** CI starts a throwaway local Supabase with [start-local-supabase.sh](../.github/scripts/start-local-supabase.sh): Postgres, Auth and the REST API in Docker, with `supabase/migrations` applied and a test user created. Without it, the integration tests and the real-backend E2E journeys are skipped locally. In CI, a skipped one counts as a failure (`PUB_ORDER_REQUIRE_INTEGRATION=1`), so a broken setup can't pass quietly.
 
-GitHub Actions ([.github/workflows/tests.yml](../.github/workflows/tests.yml)) runs on every pull request and every push to `main`. The **backend** and **frontend** jobs run install → lint → type check → unit tests → integration tests → coverage report, stopping at the first failure. Coverage below 70% of branches fails the job. **e2e** runs after both pass, and **deliver** packages a versioned build on every push to `main`.
+GitHub Actions ([.github/workflows/tests.yml](../.github/workflows/tests.yml)) runs on every pull request and every push to `main`. The **backend** and **frontend** jobs run install → lint → type check → unit tests → integration tests → coverage report, stopping at the first failure. Coverage below 70% of branches fails the job. A **security** job runs alongside them: secret scan (gitleaks), static analysis (Bandit, Semgrep) and dependency audits (pip-audit, npm audit), failing on any High finding; see [security/scans/](security/scans/README.md). **e2e** runs after backend and frontend pass, and **deliver** packages a versioned build on every push to `main` once every job, including security, has passed.
 
 ## Seam map
 

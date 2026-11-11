@@ -1,0 +1,5 @@
+# Security scanners for the CI security job (and local runs). Pinned so CI and local
+# results match. Not needed to run or test the app.
+bandit==1.9.4
+pip-audit==2.10.1
+semgrep==1.184.0

@@ -1,0 +1,55 @@
+# npm audit report
+
+minimatch  7.0.0 - 11.0.0
+Severity: moderate
+minimatch has potential denial of service via globparts amplification - https://github.com/advisories/GHSA-g3hv-75wg-m249
+fix available via `npm audit fix --force`
+Will install eslint@9.39.5, which is a breaking change
+node_modules/minimatch
+  @eslint/config-array  >=0.23.0
+  Depends on vulnerable versions of minimatch
+  node_modules/@eslint/config-array
+  eslint  >=10.0.0-alpha.0
+  Depends on vulnerable versions of @eslint/config-array
+  Depends on vulnerable versions of minimatch
+  node_modules/eslint
+    @eslint/js  >=10.0.1
+    Depends on vulnerable versions of eslint
+    node_modules/@eslint/js
+
+undici  7.0.0 - 7.30.0
+Severity: high
+undici vulnerable to Denial of Service via unbounded memory in the EventSource parser - https://github.com/advisories/GHSA-4qv8-2p9j-2685
+undici vulnerable to Subresource Integrity bypass via non-lowercase algorithm tokens - https://github.com/advisories/GHSA-f72v-6w45-q472
+undici vulnerable to Denial of Service via unhandled error on excessive content-encodings - https://github.com/advisories/GHSA-xjj6-f33q-929c
+undici vulnerable to cache poisoning and cross-user disclosure via cross-origin redirects - https://github.com/advisories/GHSA-4w7w-5xrc-9h26
+undici vulnerable to TLS certificate validation bypass via dropped tls options in Agent - https://github.com/advisories/GHSA-2m5v-pch6-74hx
+undici vulnerable to Denial of Service via TLS 1.2 certificate-changing renegotiation - https://github.com/advisories/GHSA-qrxm-fqhp-jwvm
+undici WebSocket client vulnerable to Denial of Service via unbounded automatic PONG buffering - https://github.com/advisories/GHSA-9fm3-97px-rjf6
+undici vulnerable to Denial of Service via unhandled exception in the decompress interceptor - https://github.com/advisories/GHSA-55wc-3pg8-jfw6
+fix available via `npm audit fix`
+node_modules/undici
+
+vite  8.3.0 - 8.3.2
+Severity: high
+launch-editor: escapeCmdArgs() omits % escaping on Windows - https://github.com/advisories/GHSA-698v-4r3x-3vcv
+launch-editor: Editor CLI flag misinterpretation causing arbitrary command execution for some editors - https://github.com/advisories/GHSA-r825-w8mm-5pxw
+launch-editor: `fs.existsSync()` existence check can be bypassed on Windows - https://github.com/advisories/GHSA-587h-7wmj-h5pm
+Vite: Cross origin script execution through Vite custom middleware - https://github.com/advisories/GHSA-9jrq-w75r-8gcw
+Vite: Files outside `server.fs.allow` could be served when project paths match system paths on non-Windows machine - https://github.com/advisories/GHSA-rq7h-c2jc-7f22
+Vite: First 4 bytes of files outside of `server.fs` setting is exposed by `?vite-wasm-instance` - https://github.com/advisories/GHSA-vfpm-58rq-9qcg
+fix available via `npm audit fix`
+node_modules/vite
+
+6 vulnerabilities (4 moderate, 2 high)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+npm notice
+npm notice New minor version of npm available! 11.6.1 -> 11.21.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v11.21.2
+npm notice To update run: npm install -g npm@11.21.2
+npm notice

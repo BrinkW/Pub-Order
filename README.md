@@ -108,8 +108,9 @@ npm run test:e2e    # starts the dev server itself (and the backend when a test 
 **CI/CD.** GitHub Actions ([tests.yml](.github/workflows/tests.yml)) runs on every pull request and every push to `main`:
 
 - **backend** and **frontend:** install → lint → type check (backend only) → unit tests → integration tests → coverage report, stopping at the first failure. The backend job also checks the menu migration and its permissions.
+- **security:** in parallel with the test jobs, scans for secrets in the whole git history (gitleaks), runs static analysis (Bandit for Python, Semgrep for Python and JavaScript) and audits dependencies (`pip-audit`, `npm audit --audit-level=high`). Every scan runs even if an earlier one fails, and any High finding fails the check. Scanner versions are pinned in `backend/requirements-security.txt`; known false positives are listed with reasons in `.gitleaksignore`. Results and triage: [docs/security/scans/](docs/security/scans/README.md).
 - **e2e:** browser tests against the real stack after both pass.
-- **deliver:** on every push to `main`, packages a versioned, runnable build (`pub-order-0.3.<run>-<commit>.zip`, run with `uvicorn serve:app`) as a workflow artifact. Pushing a `sprint3` tag also publishes it as a GitHub Release.
+- **deliver:** after the test jobs and the security job pass, on every push to `main`, packages a versioned, runnable build (`pub-order-0.3.<run>-<commit>.zip`, run with `uvicorn serve:app`) as a workflow artifact. Pushing a `sprint3` tag also publishes it as a GitHub Release.
 
 Packaged builds read the Supabase URL and public anon/publishable key from the root `.env` at server startup and expose those public values through `/config.js`. No GitHub build secrets or frontend rebuild are needed. Never use a service-role key as `SUPABASE_KEY`. Apply the included `migrations/` SQL files in filename order to the configured project before use.
 
