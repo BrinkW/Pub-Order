@@ -106,4 +106,19 @@ begin
   end;
 end $$;
 
+-- Only signed-in users may run cancel_order. Calling it as anon fails with 42501 either way
+-- (anon has no auth.uid()), so check the grant itself.
+do $$
+begin
+  if has_function_privilege('anon', 'public.cancel_order(uuid)', 'execute') then
+    raise exception 'anon can execute cancel_order';
+  end if;
+  if has_function_privilege('public', 'public.cancel_order(uuid)', 'execute') then
+    raise exception 'public can execute cancel_order';
+  end if;
+  if not has_function_privilege('authenticated', 'public.cancel_order(uuid)', 'execute') then
+    raise exception 'authenticated cannot execute cancel_order';
+  end if;
+end $$;
+
 rollback;

@@ -2,14 +2,16 @@
 -- Once the kitchen has started it, the order can no longer be cancelled, and the kitchen
 -- cannot move a cancelled order back into the queue.
 
-alter table public.orders drop constraint orders_status_check;
+-- Safe to run again: the constraint is dropped only if it exists, and functions are replaced.
+alter table public.orders drop constraint if exists orders_status_check;
 alter table public.orders add constraint orders_status_check
   check (status in ('Received', 'Preparing', 'Ready', 'Collected', 'Cancelled'));
 
 -- Errors: 42501 not signed in, P0002 no such order for this student (someone else's order
--- looks the same as a missing one), 55000 the kitchen has already started it.
+-- looks the same as a missing one), 55000 the kitchen has already started it (the detail is
+-- the order's current status, so the API can say why).
 -- Cancelling an order that is already cancelled succeeds, so a retried request is harmless.
-create function public.cancel_order(p_order_id uuid)
+create or replace function public.cancel_order(p_order_id uuid)
 returns void
 language plpgsql
 security definer
@@ -38,7 +40,8 @@ begin
     raise exception 'cancel_order: order not found' using errcode = 'P0002';
   end if;
   if v_status <> 'Cancelled' then
-    raise exception 'cancel_order: the kitchen has already started this order' using errcode = '55000';
+    raise exception 'cancel_order: the kitchen has already started this order'
+      using errcode = '55000', detail = v_status;
   end if;
 end;
 $$;
