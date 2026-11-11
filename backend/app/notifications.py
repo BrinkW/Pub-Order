@@ -20,6 +20,7 @@ STATUS_MESSAGES = {
     "Preparing": "The Pub is preparing your order now.",
     "Ready": "Your Pub order is ready for pickup. Head to the counter and give staff your order number.",
     "Collected": "Your Pub order was marked as picked up.",
+    "Cancelled": "Your Pub order was cancelled, so the kitchen will not make it.",
 }
 
 

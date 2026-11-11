@@ -1,6 +1,6 @@
 // Unit tests for reading saved orders from the API (US4, US6). Supabase and fetch are faked.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { emailStudent, loadOrder, loadOrders, updateOrderStatus } from './order-api.js';
+import { cancelOrder, emailStudent, loadOrder, loadOrders, updateOrderStatus } from './order-api.js';
 import { getSupabase } from './supabase.js';
 
 vi.mock('./supabase.js', () => ({ getSupabase: vi.fn() }));
@@ -93,6 +93,48 @@ describe('loadOrders', () => {
     await expect(loadOrders()).rejects.toThrow('Could not load your orders. Please try again.');
     fetch.mockResolvedValueOnce(response([{ id: 'nope' }]));
     await expect(loadOrders()).rejects.toThrow('Could not load your orders');
+  });
+});
+
+describe('cancelOrder', () => {
+  it('posts the cancel with the login token', async () => {
+    fetch.mockResolvedValueOnce(response({ ...order, status: 'Cancelled' }));
+
+    await expect(cancelOrder(ID)).resolves.toEqual({ order: { ...order, status: 'Cancelled' } });
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe(`/api/orders/${ID}/cancel`);
+    expect(options.method).toBe('POST');
+    expect(options.headers.Authorization).toBe('Bearer test-token');
+  });
+
+  it.each([[401, { signInRequired: true }], [404, { notFound: true }]])(
+    'reports a %i without throwing', async (status, expected) => {
+      fetch.mockResolvedValueOnce(response({ detail: 'no' }, status));
+      await expect(cancelOrder(ID)).resolves.toEqual(expected);
+    },
+  );
+
+  it('passes on the server’s reason when it is too late to cancel', async () => {
+    fetch.mockResolvedValueOnce(response({ detail: 'This order is ready for pickup, so it can’t be cancelled.' }, 409));
+    await expect(cancelOrder(ID)).resolves.toEqual({
+      tooLate: true, message: 'This order is ready for pickup, so it can’t be cancelled.',
+    });
+  });
+
+  it('accepts a cancel confirmed with only the id and status', async () => {
+    fetch.mockResolvedValueOnce(response({ id: ID, status: 'Cancelled' }));
+    await expect(cancelOrder(ID)).resolves.toEqual({ order: { id: ID, status: 'Cancelled' } });
+  });
+
+  it('rejects a short reply that does not confirm the cancel', async () => {
+    fetch.mockResolvedValueOnce(response({ id: ID, status: 'Received' }));
+    await expect(cancelOrder(ID)).rejects.toThrow('Could not cancel this order. Please try again.');
+  });
+
+  it('throws a friendly error when the server fails', async () => {
+    fetch.mockResolvedValueOnce(response({ detail: 'down' }, 503));
+    await expect(cancelOrder(ID)).rejects.toThrow('Could not cancel this order. Please try again.');
   });
 });
 

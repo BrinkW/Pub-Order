@@ -4,7 +4,7 @@ import { loadMenu, setItemAvailability } from './menu-api.js';
 import { CrowdMeterControls } from './CrowdMeter.jsx';
 import PubHeader from './PubHeader.jsx';
 import { emailStudent, loadOrders, updateOrderStatus } from './order-api.js';
-import { ORDER_STATUSES, formatPlacedAt, isOpenOrder, shortOrderId, stepLabel, swipeLabel } from './order-status.js';
+import { CANCELLED, ORDER_STATUSES, formatPlacedAt, isOpenOrder, shortOrderId, stepLabel, swipeLabel } from './order-status.js';
 
 export default function Kitchen({ email, onSignOut }) {
   const [orders, setOrders] = useState([]);
@@ -89,7 +89,7 @@ export default function Kitchen({ email, onSignOut }) {
   }
 
   const open = orders.filter(isOpenOrder);
-  const collected = orders.filter((order) => !isOpenOrder(order));
+  const closed = orders.filter((order) => !isOpenOrder(order));
 
   return (
     <div className="menu-page order-page">
@@ -113,7 +113,7 @@ export default function Kitchen({ email, onSignOut }) {
         </div>}
         {state === 'ready' && orders.length === 0 && <div className="order-message"><p>No orders yet.</p></div>}
         {state === 'ready' && open.length > 0 && <OrderGroup title="Open" orders={open} savingId={savingId} emailedId={emailedId} onChangeStatus={changeStatus} onNotify={notifyStudent} />}
-        {state === 'ready' && collected.length > 0 && <OrderGroup title="Collected" orders={collected} savingId={savingId} emailedId={emailedId} onChangeStatus={changeStatus} onNotify={notifyStudent} />}
+        {state === 'ready' && closed.length > 0 && <OrderGroup title="Closed" orders={closed} savingId={savingId} emailedId={emailedId} onChangeStatus={changeStatus} onNotify={notifyStudent} />}
         {menuError && <p className="order-refresh-error" role="alert">{menuError}</p>}
         {menu.length > 0 && <MenuStock items={menu} savingId={savingId} onToggle={toggleSoldOut} />}
         {rowError && <p className="order-refresh-error" role="alert">{rowError}</p>}
@@ -158,7 +158,7 @@ function OrderGroup({ title, orders, savingId, emailedId, onChangeStatus, onNoti
             <strong>Order #{shortOrderId(order.id)}</strong>
             <span>{order.items.map((item) => `${item.name} × ${item.quantity}`).join(', ')}</span>
             <span className="order-row-meta">{swipeLabel(order.swipes)}{order.createdAt ? ` · ${formatPlacedAt(order.createdAt)}` : ''}</span>
-            <div className="kitchen-status" role="group" aria-label={`Status for order ${shortOrderId(order.id)}`}>
+            {order.status !== CANCELLED && <div className="kitchen-status" role="group" aria-label={`Status for order ${shortOrderId(order.id)}`}>
               {ORDER_STATUSES.map((status) => (
                 <button
                   key={status}
@@ -171,7 +171,7 @@ function OrderGroup({ title, orders, savingId, emailedId, onChangeStatus, onNoti
                   {stepLabel(status)}
                 </button>
               ))}
-            </div>
+            </div>}
             {order.studentEmail ? <div className="kitchen-notification">
               <span>Student notification: {order.studentEmail}</span>
               <button

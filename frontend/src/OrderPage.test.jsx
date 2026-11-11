@@ -4,10 +4,10 @@ import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import OrderPage from './OrderPage.jsx';
-import { loadOrder } from './order-api.js';
+import { cancelOrder, loadOrder } from './order-api.js';
 import { STATUS_POLL_MS } from './order-status.js';
 
-vi.mock('./order-api.js', () => ({ loadOrder: vi.fn() }));
+vi.mock('./order-api.js', () => ({ loadOrder: vi.fn(), cancelOrder: vi.fn() }));
 
 const ID = '0a1b2c3d-0000-4000-8000-000000000001';
 const saved = (status = 'Received') => ({
@@ -225,5 +225,102 @@ describe('US6 pickup tracking', () => {
     await act(async () => finishSlow({ order: saved('Received') }));
 
     expect(screen.getByRole('heading', { level: 2, name: 'Ready for pickup' })).toBeInTheDocument();
+  });
+});
+
+describe('US23 cancelling an order', () => {
+  beforeEach(() => { vi.spyOn(window, 'confirm').mockReturnValue(true); });
+
+  it('cancels a Received order after the student confirms', async () => {
+    cancelOrder.mockResolvedValue({ order: saved('Cancelled') });
+    renderPage({ initialOrder: saved() });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+
+    expect(cancelOrder).toHaveBeenCalledWith(ID);
+    expect(await screen.findByRole('heading', { name: 'Cancelled' })).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Order progress' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancel order' })).not.toBeInTheDocument();
+  });
+
+  it('does nothing when the student changes their mind', async () => {
+    window.confirm.mockReturnValue(false);
+    renderPage({ initialOrder: saved() });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+
+    expect(cancelOrder).not.toHaveBeenCalled();
+  });
+
+  it('explains when the kitchen started first and shows the new status', async () => {
+    cancelOrder.mockResolvedValue({ tooLate: true });
+    renderPage({ initialOrder: saved() });
+    await vi.waitFor(() => expect(loadOrder).toHaveBeenCalledTimes(1));
+    loadOrder.mockResolvedValue({ order: saved('Preparing') });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+
+    expect(await screen.findByText(/already started this order/)).toBeInTheDocument();
+    expect(currentStep()).toHaveTextContent('Preparing');
+    expect(screen.queryByRole('button', { name: 'Cancel order' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the cancel when an older status read finishes after it', async () => {
+    let finishSlow;
+    loadOrder.mockReturnValueOnce(new Promise((resolve) => { finishSlow = resolve; }));
+    cancelOrder.mockResolvedValue({ order: saved('Cancelled') });
+    renderPage({ initialOrder: saved() });
+    await vi.waitFor(() => expect(loadOrder).toHaveBeenCalledTimes(1));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+    await screen.findByRole('heading', { name: 'Cancelled' });
+    await act(async () => finishSlow({ order: saved('Received') }));
+
+    expect(screen.getByRole('heading', { name: 'Cancelled' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancel order' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the order details when the server confirms the cancel without them', async () => {
+    cancelOrder.mockResolvedValue({ order: { id: ID, status: 'Cancelled' } });
+    renderPage({ initialOrder: saved() });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+
+    expect(await screen.findByRole('heading', { name: 'Cancelled' })).toBeInTheDocument();
+    expect(screen.getByText('Burger')).toBeInTheDocument();
+  });
+
+  it('shows the server’s reason when the order is too far along to cancel', async () => {
+    cancelOrder.mockResolvedValue({ tooLate: true, message: 'This order is ready for pickup, so it can’t be cancelled.' });
+    renderPage({ initialOrder: saved() });
+    await vi.waitFor(() => expect(loadOrder).toHaveBeenCalledTimes(1));
+    loadOrder.mockResolvedValue({ order: saved('Ready') });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+
+    expect(await screen.findByText('This order is ready for pickup, so it can’t be cancelled.')).toBeInTheDocument();
+  });
+
+  it('clears the too-late message once the order moves on', async () => {
+    cancelOrder.mockResolvedValue({ tooLate: true });
+    renderPage({ initialOrder: saved() });
+    await vi.waitFor(() => expect(loadOrder).toHaveBeenCalledTimes(1));
+    loadOrder.mockResolvedValue({ order: saved('Preparing') });
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel order' }));
+    await screen.findByText(/already started this order/);
+
+    loadOrder.mockResolvedValue({ order: saved('Ready') });
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh status' }));
+
+    await screen.findByRole('heading', { level: 2, name: 'Ready for pickup' });
+    expect(screen.queryByText(/already started this order/)).not.toBeInTheDocument();
+  });
+
+  it('offers no cancel once the kitchen has started', async () => {
+    loadOrder.mockResolvedValue({ order: saved('Preparing') });
+    renderPage({ initialOrder: saved('Preparing') });
+
+    await vi.waitFor(() => expect(loadOrder).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: 'Cancel order' })).not.toBeInTheDocument();
   });
 });

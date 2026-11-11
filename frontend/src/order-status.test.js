@@ -1,7 +1,7 @@
 // Unit tests for the order status rules behind the confirmation page (US4) and pickup tracking (US6).
 import { describe, expect, it } from 'vitest';
 import {
-  ORDER_STATUSES, formatPlacedAt, isOpenOrder, isOrder, isOrderId, shortOrderId, statusMessage, statusSteps,
+  ORDER_STATUSES, canCancel, formatPlacedAt, isOpenOrder, isOrder, isOrderId, shortOrderId, statusMessage, statusSteps,
   stepLabel, swipeLabel,
 } from './order-status.js';
 
@@ -66,7 +66,16 @@ describe('isOpenOrder', () => {
   it('keeps checking every status until the order is collected', () => {
     expect(['Received', 'Preparing', 'Ready'].every((status) => isOpenOrder(order({ status })))).toBe(true);
     expect(isOpenOrder(order({ status: 'Collected' }))).toBe(false);
+    expect(isOpenOrder(order({ status: 'Cancelled' }))).toBe(false);
     expect(isOpenOrder(null)).toBe(false);
+  });
+});
+
+describe('canCancel', () => {
+  it('allows cancelling only before the kitchen starts', () => {
+    expect(canCancel(order({ status: 'Received' }))).toBe(true);
+    expect(['Preparing', 'Ready', 'Collected', 'Cancelled'].some((status) => canCancel(order({ status })))).toBe(false);
+    expect(canCancel(null)).toBe(false);
   });
 });
 

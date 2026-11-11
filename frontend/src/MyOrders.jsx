@@ -52,7 +52,8 @@ export default function MyOrders({ email, onOpenOrder, onBackToMenu, onSignIn })
           <button className="menu-add" onClick={onBackToMenu}>Browse the menu</button>
         </div>}
         {state === 'ready' && current.length > 0 && <OrderGroup title="In progress" orders={current} onOpenOrder={onOpenOrder} />}
-        {state === 'ready' && past.length > 0 && <OrderGroup title="Picked up" orders={past} onOpenOrder={onOpenOrder} />}
+        {/* Picked up and cancelled orders both land here; each row's chip says which. */}
+        {state === 'ready' && past.length > 0 && <OrderGroup title="Past orders" orders={past} onOpenOrder={onOpenOrder} />}
         {state === 'ready' && orders.length > 0 && <button className="menu-text-button" onClick={() => setAttempt((n) => n + 1)}>Refresh list</button>}
       </main>
     </div>
