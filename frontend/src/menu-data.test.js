@@ -7,6 +7,11 @@ import { CATEGORIES, MENU_ITEMS } from './menu-data.js';
 import { hasListedNutrition, nutritionFor } from './nutrition.js';
 
 const imageDir = path.resolve(import.meta.dirname, '../public/images/menu') + path.sep;
+const ALLOWED_MARKERS = new Set([
+  'Alcohol', 'Dairy', 'Egg', 'Fish', 'Gluten', 'Peanut', 'Pork', 'Sesame',
+  'Shellfish', 'Soy', 'Tree Nut', 'Features Local Ingredient', 'Halal', 'Kosher',
+  'Vegan', 'Vegetarian',
+]);
 
 describe('menu data', () => {
   test('every item has a unique id', () => {
@@ -27,6 +32,18 @@ describe('menu data', () => {
     for (const type of SWIPE_TYPES) {
       expect(MENU_ITEMS.some((item) => item.swipeType === type), type).toBe(true);
     }
+  });
+
+  test('every item uses unique markers from the Pub NetNutrition vocabulary', () => {
+    for (const item of MENU_ITEMS) {
+      expect(Array.isArray(item.markers), item.id).toBe(true);
+      expect(new Set(item.markers).size, item.id).toBe(item.markers.length);
+      expect(item.markers.every((marker) => ALLOWED_MARKERS.has(marker)), item.id).toBe(true);
+    }
+    expect(MENU_ITEMS.find((item) => item.id === 'seasoned-wings').markers).toEqual(['Gluten', 'Halal']);
+    expect(MENU_ITEMS.find((item) => item.id === 'pub-burger').markers).toEqual([
+      'Gluten', 'Sesame', 'Features Local Ingredient',
+    ]);
   });
 
   test('categories start with All, have no duplicates, and each has items', () => {

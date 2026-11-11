@@ -67,6 +67,15 @@ describe('Browsing the full menu', () => {
 
     expect(image.getAttribute('src')).toMatch(/^data:image\/svg\+xml/);
   });
+
+  it('shows every Pub marker instead of only one dietary label', async () => {
+    await setup();
+    const burger = screen.getByRole('heading', { name: 'Pub Burger' }).closest('article');
+
+    expect(within(burger).getByText('Gluten')).toBeInTheDocument();
+    expect(within(burger).getByText('Sesame')).toBeInTheDocument();
+    expect(within(burger).getByText('Features Local Ingredient')).toBeInTheDocument();
+  });
 });
 
 describe('Adding to the cart', () => {

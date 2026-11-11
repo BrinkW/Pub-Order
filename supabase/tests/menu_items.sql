@@ -12,6 +12,17 @@ begin
   if not (select relrowsecurity from pg_class where oid = 'public.menu_items'::regclass) then
     raise exception 'Row-level security must be enabled';
   end if;
+  if (select markers from public.menu_items where id = 'seasoned-wings')
+     is distinct from array['Gluten', 'Halal'] then
+    raise exception 'Seasoned Wings markers do not match the Pub website';
+  end if;
+  if (select markers from public.menu_items where id = 'pub-burger')
+     is distinct from array['Gluten', 'Sesame', 'Features Local Ingredient'] then
+    raise exception 'Pub Burger markers do not match the Pub website';
+  end if;
+  if exists (select 1 from public.menu_items where markers is null) then
+    raise exception 'Every menu item must have a marker array';
+  end if;
   begin
     insert into public.menu_items (id, name, category, swipe_type) values ('bad', 'Bad', 'Test', 'Other');
     raise exception 'Invalid meal category was accepted';

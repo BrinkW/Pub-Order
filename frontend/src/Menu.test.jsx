@@ -83,6 +83,10 @@ it('rejects malformed menu responses', async () => {
   fetch.mockResolvedValueOnce(response([{ id: 'invalid' }])); render(<Menu />);
   expect(await screen.findByRole('alert')).toHaveTextContent('could not be loaded');
 });
+it('rejects duplicate or malformed marker lists', async () => {
+  fetch.mockResolvedValueOnce(response([{ ...catalog[0], markers: ['Gluten', 'Gluten'] }])); render(<Menu />);
+  expect(await screen.findByRole('alert')).toHaveTextContent('could not be loaded');
+});
 it('cannot add unavailable items', async () => {
   fetch.mockResolvedValueOnce(response(catalog.map((i) => ({ ...i, available: false })))); render(<Menu />);
   expect(await screen.findByRole('button', { name: 'Add Burger to cart' })).toBeDisabled();

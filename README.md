@@ -10,6 +10,7 @@ The goal of the project is to allow students to view available menu items, place
 
 - Student login and authentication
 - View current menu items
+- See Pub dietary-preference and allergen markers on each menu item
 - See the latest crowd level reported by Pub staff
 - Add items to a cart
 - Place food orders
@@ -17,6 +18,8 @@ The goal of the project is to allow students to view available menu items, place
 - Estimated wait times
 - Simple interface designed for Vanderbilt students
 - Staff controls for Low, Moderate, or Busy crowd levels
+
+Menu markers were verified against Vanderbilt NetNutrition for The Pub at Overcup Oak on November 11, 2026. Dining data can change; students with dietary restrictions should confirm current information with Campus Dining staff.
 
 ## Tech Stack
 
