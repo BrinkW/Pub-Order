@@ -231,19 +231,6 @@ export default function Menu({ email, onBack, onViewOrders, onOrderPlaced }) {
             {loadState === 'ready' && catalog.length === 0 && <p role="status">No menu items are available yet. Please check back soon.</p>}
             <p className="menu-results" aria-live="polite">{choiceCount} {choiceCount === 1 ? 'choice' : 'choices'}</p>
             <div className="menu-grid">
-              {showNoSide ? (
-                <article className="menu-item" aria-labelledby="name-no-side">
-                  <div className="menu-item-image menu-no-side-image" aria-hidden="true"><span>None</span></div>
-                  <div className="menu-item-top"><span className="menu-item-category">Side</span></div>
-                  <div className="menu-item-heading"><h2 id="name-no-side">No side</h2></div>
-                  <p>Leave this part of the meal out.</p>
-                  <div className="menu-item-bottom">
-                    <button className="menu-add" aria-label="Add No side" aria-pressed={Boolean(cart.noSide) && picked.side.length === 0} onClick={skipSide}>
-                      {cart.noSide && picked.side.length === 0 ? 'Added' : '+ Add'}
-                    </button>
-                  </div>
-                </article>
-              ) : null}
               {(loadState === 'ready' ? visibleItems : []).map((item) => {
                 const quantity = cart.items[item.id] || 0;
                 const typeFull = summary.counts[item.swipeType] >= cart.swipes;
@@ -299,6 +286,19 @@ export default function Menu({ email, onBack, onViewOrders, onOrderPlaced }) {
                   </article>
                 );
               })}
+              {showNoSide ? (
+                <article className="menu-item" aria-labelledby="name-no-side">
+                  <div className="menu-item-image menu-no-side-image" aria-hidden="true"><span>None</span></div>
+                  <div className="menu-item-top"><span className="menu-item-category">Side</span></div>
+                  <div className="menu-item-heading"><h2 id="name-no-side">No side</h2></div>
+                  <p>Leave this part of the meal out.</p>
+                  <div className="menu-item-bottom">
+                    <button className="menu-add" aria-label="Add No side" aria-pressed={Boolean(cart.noSide) && picked.side.length === 0} onClick={skipSide}>
+                      {cart.noSide && picked.side.length === 0 ? 'Added' : '+ Add'}
+                    </button>
+                  </div>
+                </article>
+              ) : null}
             </div>
             {loadState === 'ready' && catalog.length > 0 && choiceCount === 0 ? <div className="menu-no-results"><h2>No matches this time.</h2><p>Try a different search.</p><button className="menu-text-button" onClick={() => setQuery('')}>Clear search</button></div> : null}
           </section>
