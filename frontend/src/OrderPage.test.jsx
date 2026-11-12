@@ -324,3 +324,66 @@ describe('US23 cancelling an order', () => {
     expect(screen.queryByRole('button', { name: 'Cancel order' })).not.toBeInTheDocument();
   });
 });
+
+describe('US4 live updates on the order page', () => {
+  it('re-reads the order straight away when a live update for it arrives', async () => {
+    const view = renderPage();
+    await screen.findByRole('heading', { name: 'Waiting for the kitchen' });
+    loadOrder.mockResolvedValue({ order: saved('Ready') });
+
+    view.rerender(<OrderPage {...props} liveUpdate={{ orderId: ID, status: 'Ready' }} />);
+
+    expect(await screen.findByRole('heading', { name: 'Ready for pickup' })).toBeInTheDocument();
+    expect(screen.getByText('Your order is now ready for pickup.')).toBeInTheDocument();
+  });
+
+  it('ignores live updates for a different order', async () => {
+    const view = renderPage();
+    await screen.findByRole('heading', { name: 'Waiting for the kitchen' });
+    const reads = loadOrder.mock.calls.length;
+
+    view.rerender(<OrderPage {...props} liveUpdate={{ orderId: '9f8e7d6c-0000-4000-8000-000000000002', status: 'Ready' }} />);
+    await act(async () => {});
+
+    expect(loadOrder.mock.calls.length).toBe(reads);
+  });
+});
+
+describe('US4 browser alerts opt-in', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function stubNotifications(permission, answer = 'granted') {
+    const api = { permission, requestPermission: vi.fn(async () => answer) };
+    vi.stubGlobal('Notification', api);
+    return api;
+  }
+
+  it('asks for permission only when the student clicks, and confirms when allowed', async () => {
+    const api = stubNotifications('default');
+    renderPage();
+    await screen.findByRole('heading', { name: 'Waiting for the kitchen' });
+    expect(api.requestPermission).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Turn on browser alerts' }));
+
+    expect(api.requestPermission).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/Browser alerts are on/)).toBeInTheDocument();
+  });
+
+  it('explains when alerts are blocked', async () => {
+    stubNotifications('denied');
+    renderPage();
+
+    expect(await screen.findByText(/Browser alerts are blocked/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Turn on browser alerts' })).not.toBeInTheDocument();
+  });
+
+  it('does not offer alerts for a finished order', async () => {
+    stubNotifications('default');
+    loadOrder.mockResolvedValue({ order: saved('Collected') });
+    renderPage();
+
+    await screen.findByRole('heading', { name: 'Picked up' });
+    expect(screen.queryByRole('button', { name: 'Turn on browser alerts' })).not.toBeInTheDocument();
+  });
+});

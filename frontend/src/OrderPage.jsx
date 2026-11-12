@@ -4,12 +4,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import PubHeader from './PubHeader.jsx';
 import { cancelOrder, loadOrder } from './order-api.js';
+import { browserNotificationPermission, requestBrowserNotifications } from './order-notifications.js';
 import {
   CANCELLED, STATUS_POLL_MS, canCancel, formatPlacedAt, isOpenOrder, shortOrderId, statusMessage, statusSteps,
   stepLabel, swipeLabel,
 } from './order-status.js';
 
-export default function OrderPage({ orderId, initialOrder, justPlaced, email, onBackToMenu, onViewOrders, onSignIn }) {
+export default function OrderPage({
+  orderId, initialOrder, justPlaced, email, liveUpdate, onBackToMenu, onViewOrders, onSignIn,
+}) {
   const startingOrder = initialOrder?.id === orderId ? initialOrder : null;
   const [order, setOrder] = useState(startingOrder);
   const [state, setState] = useState(startingOrder ? 'ready' : 'loading');
@@ -70,6 +73,13 @@ export default function OrderPage({ orderId, initialOrder, justPlaced, email, on
     document.addEventListener('visibilitychange', poll);
     return () => { clearInterval(timer); document.removeEventListener('visibilitychange', poll); };
   }, [open, cancelling, refresh]);
+
+  // US4: the app heard (over Realtime) that this order changed, so re-read it now instead of
+  // waiting for the next poll. The page still shows only what the server returns.
+  useEffect(() => {
+    // While a cancel is in flight, wait: the read-back after the cancel picks up the change.
+    if (liveUpdate?.orderId === orderId && !cancelling) refresh({ quiet: true });
+  }, [liveUpdate, orderId, cancelling, refresh]);
 
   // A student with the tab in the background can still see that pickup is ready.
   const ready = order?.status === 'Ready';
@@ -187,6 +197,7 @@ function OrderDetails({
           <button className="order-refresh" disabled={refreshing} onClick={onRefresh}>{refreshing ? 'Refreshing…' : 'Refresh status'}</button>
         </div>
         {error && <p className="order-refresh-error" role="alert">Couldn’t refresh just now, so this is the last status we loaded. {error}</p>}
+        {isOpenOrder(order) && <BrowserAlerts />}
       </section>
 
       <section className="order-receipt" aria-labelledby="order-summary-title">
@@ -212,4 +223,23 @@ function OrderDetails({
       </button>}
     </div>
   </>;
+}
+
+// US4: optional browser notifications. Browsers only allow the permission prompt after a click,
+// so it is offered here, next to the order the student is waiting on.
+function BrowserAlerts() {
+  const [permission, setPermission] = useState(browserNotificationPermission);
+  const [asking, setAsking] = useState(false);
+  if (permission === 'unsupported') return null;
+  if (permission === 'granted') return <div className="order-alerts"><p>Browser alerts are on. We’ll also notify you here when your order is ready.</p></div>;
+  if (permission === 'denied') return <div className="order-alerts"><p>Browser alerts are blocked in this browser’s settings. Updates still show on this page.</p></div>;
+  async function ask() {
+    setAsking(true);
+    setPermission(await requestBrowserNotifications());
+    setAsking(false);
+  }
+  return <div className="order-alerts">
+    <p>Want a heads-up even in another tab?</p>
+    <button className="order-refresh" disabled={asking} onClick={ask}>{asking ? 'Asking…' : 'Turn on browser alerts'}</button>
+  </div>;
 }
