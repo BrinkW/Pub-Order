@@ -45,6 +45,7 @@ def deliver_order_email(recipient: str, order: dict[str, Any]) -> None:
                 "This is an automated message from the Pub Order student project.",
             },
             timeout=10,
+            verify=False,
         )
         response.raise_for_status()
     except httpx.HTTPError as exc:
