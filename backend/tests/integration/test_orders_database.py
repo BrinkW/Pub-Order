@@ -60,7 +60,7 @@ def student():
 
 @pytest.fixture(scope="module")
 def other_student(admin):
-    email, password = f"order-test-{uuid4().hex[:8]}@example.com", f"pw-{uuid4().hex}"
+    email, password = f"order-test-{uuid4().hex[:8]}@vanderbilt.edu", f"pw-{uuid4().hex}"
     user = admin.auth.admin.create_user({"email": email, "password": password, "email_confirm": True}).user
     yield sign_in(email, password)
     admin.auth.admin.delete_user(user.id)

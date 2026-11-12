@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { getSupabase } from './supabase.js';
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// SEC-02: the database refuses other addresses too; this just says so before trying.
+const VANDERBILT_EMAIL = /@vanderbilt\.edu$/i;
 
 function signInMessage(error) {
   if (error.code === 'email_not_confirmed') {
@@ -31,6 +33,8 @@ function validate({ email, password, confirmPassword, mode }) {
     errors.email = 'Enter your email.';
   } else if (!EMAIL_PATTERN.test(trimmedEmail)) {
     errors.email = 'Enter a valid email address.';
+  } else if (mode === 'sign-up' && !VANDERBILT_EMAIL.test(trimmedEmail)) {
+    errors.email = 'Use your @vanderbilt.edu email address.';
   }
 
   if (!password) {
@@ -106,6 +110,8 @@ export default function Login({ onBrowse, onSignedIn } = {}) {
         const { data, error } = await supabase.auth.signUp({
           email: email.trim(),
           password,
+          // The confirmation link brings the student back to this site (local or staging).
+          options: { emailRedirectTo: window.location.origin },
         });
         if (error) {
           setFormError(signUpMessage(error));
@@ -115,7 +121,7 @@ export default function Login({ onBrowse, onSignedIn } = {}) {
           setPassword('');
           setConfirmPassword('');
           setMode('sign-in');
-          setNotice('Account created. Sign in to continue.');
+          setNotice('Account created. Check your email for a confirmation link, then sign in.');
           return;
         }
         const account = await confirmSession(data.session);

@@ -221,6 +221,15 @@ Marked `integration`. Uses the test user that CI creates in the local Supabase.
 | [`test_garbage_token_is_rejected`](../backend/tests/integration/test_supabase_auth.py#L49) | **Failure path:** real Supabase rejects a made-up token, so `/me` returns 401. |
 | [`test_token_with_tampered_signature_is_rejected`](../backend/tests/integration/test_supabase_auth.py#L55) | **Failure path:** a real token with a changed signature is rejected with 401. |
 
+### Integration: who can sign up (SEC-02): [integration/test_signup_database.py](../backend/tests/integration/test_signup_database.py)
+
+Marked `integration`, local Supabase only. Signs up through Supabase Auth with the public key, the way the browser does, and deletes any account it creates.
+
+| Test | What it checks |
+|---|---|
+| [`test_signup_with_a_non_vanderbilt_email_is_refused`](../backend/tests/integration/test_signup_database.py#L59) | **SEC-02 regression, failure path:** signing up with a `@gmail.com` address raises an Auth error and no account is created. |
+| [`test_signup_with_a_vanderbilt_email_creates_a_student`](../backend/tests/integration/test_signup_database.py#L68) | A `@vanderbilt.edu` sign-up works, and its profile is a student (SEC-01). |
+
 ### Release server: [test_serve.py](../backend/tests/test_serve.py)
 
 Covers [serve.py](../backend/serve.py), which runs the release artifact as one process.
@@ -317,45 +326,47 @@ These run before anything is sent to Supabase.
 | [rejects a badly formed email](../frontend/src/Login.test.jsx#L54) | An email like `not-an-email` shows "Enter a valid email address." |
 | [requires the confirmation password on sign up](../frontend/src/Login.test.jsx#L64) | On Sign up, leaving "Confirm password" empty shows "Confirm your password." |
 | [rejects mismatched passwords on sign up](../frontend/src/Login.test.jsx#L75) | On Sign up, two different passwords show "Passwords do not match." |
+| [only lets a Vanderbilt email sign up (SEC-02)](../frontend/src/Login.test.jsx#L87) | On Sign up, `someone@gmail.com` shows "Use your @vanderbilt.edu email address." and Supabase isn't called. The database enforces the same rule, since sign-up can skip this page. |
+| [still lets an existing account with another email sign in](../frontend/src/Login.test.jsx#L97) | Sign in doesn't apply the Vanderbilt rule, so existing accounts with other addresses still work. |
 
 #### Form controls
 
 | Test | What it checks |
 |---|---|
-| [shows and hides the password](../frontend/src/Login.test.jsx#L89) | The Show/Hide button switches the password between hidden and visible text. |
-| [switches tabs and clears errors](../frontend/src/Login.test.jsx#L103) | Switching to Sign up clears existing errors and adds the "Confirm password" field and a "Create account" button; switching back removes the field. |
-| [explains when Supabase is not configured](../frontend/src/Login.test.jsx#L121) | With no Supabase settings, submitting shows "Sign-in is not configured yet." and makes no request. |
+| [shows and hides the password](../frontend/src/Login.test.jsx#L110) | The Show/Hide button switches the password between hidden and visible text. |
+| [switches tabs and clears errors](../frontend/src/Login.test.jsx#L124) | Switching to Sign up clears existing errors and adds the "Confirm password" field and a "Create account" button; switching back removes the field. |
+| [explains when Supabase is not configured](../frontend/src/Login.test.jsx#L142) | With no Supabase settings, submitting shows "Sign-in is not configured yet." and makes no request. |
 
 #### Signing in
 
 | Test | What it checks |
 |---|---|
-| [signs in and confirms the session with the backend](../frontend/src/Login.test.jsx#L151) | A successful sign-in trims spaces from the email, sends the token to `/api/me` as `Bearer <token>`, and shows "Signed in as …". |
-| [shows a message for the … error](../frontend/src/Login.test.jsx#L169) ×3 | Supabase error codes show the right message: `invalid_credentials` → "Email or password is incorrect.", `email_not_confirmed` → "You need to confirm your email…", anything else → "Could not sign in. Try again." |
-| [handles a response with no session and no error](../frontend/src/Login.test.jsx#L184) | If Supabase returns neither a session nor an error, the generic "Could not sign in" message appears. |
-| [shows the backend error when the session cannot be confirmed](../frontend/src/Login.test.jsx#L194) | If `/api/me` fails, the backend's error message is shown and the "Signed in" message isn't. |
-| [falls back to a generic message when the backend returns no JSON](../frontend/src/Login.test.jsx#L206) | If `/api/me` fails without a readable body, "The server could not confirm this sign-in." is shown. |
-| [disables the submit button while signing in](../frontend/src/Login.test.jsx#L217) | While sign-in is in progress, the button reads "Signing in…" and can't be clicked; it's enabled again afterwards. |
+| [signs in and confirms the session with the backend](../frontend/src/Login.test.jsx#L172) | A successful sign-in trims spaces from the email, sends the token to `/api/me` as `Bearer <token>`, and shows "Signed in as …". |
+| [shows a message for the … error](../frontend/src/Login.test.jsx#L190) ×3 | Supabase error codes show the right message: `invalid_credentials` → "Email or password is incorrect.", `email_not_confirmed` → "You need to confirm your email…", anything else → "Could not sign in. Try again." |
+| [handles a response with no session and no error](../frontend/src/Login.test.jsx#L205) | If Supabase returns neither a session nor an error, the generic "Could not sign in" message appears. |
+| [shows the backend error when the session cannot be confirmed](../frontend/src/Login.test.jsx#L215) | If `/api/me` fails, the backend's error message is shown and the "Signed in" message isn't. |
+| [falls back to a generic message when the backend returns no JSON](../frontend/src/Login.test.jsx#L227) | If `/api/me` fails without a readable body, "The server could not confirm this sign-in." is shown. |
+| [disables the submit button while signing in](../frontend/src/Login.test.jsx#L238) | While sign-in is in progress, the button reads "Signing in…" and can't be clicked; it's enabled again afterwards. |
 
 #### Signing up
 
 | Test | What it checks |
 |---|---|
-| [shows a message for the … error](../frontend/src/Login.test.jsx#L235) ×4 | Supabase error codes show the right message: `user_already_exists` and `email_exists` → "An account with this email already exists.", `weak_password` → "Use at least 6 characters.", anything else → "Could not create the account. Try again." |
-| [sends the user to sign in when email confirmation is required](../frontend/src/Login.test.jsx#L254) | If Supabase creates the account without a session, the page switches to Sign in, keeps the email, clears the password, and shows "Account created. Sign in to continue." |
-| [signs in immediately when Supabase returns a session](../frontend/src/Login.test.jsx#L268) | If Supabase returns a session right away, the page confirms it with `/api/me` and shows "Signed in as …". |
+| [shows a message for the … error](../frontend/src/Login.test.jsx#L256) ×4 | Supabase error codes show the right message: `user_already_exists` and `email_exists` → "An account with this email already exists.", `weak_password` → "Use at least 6 characters.", anything else → "Could not create the account. Try again." Sign-up asks Supabase to send the confirmation link back to this site. |
+| [sends the user to sign in when email confirmation is required](../frontend/src/Login.test.jsx#L276) | If Supabase creates the account without a session, the page switches to Sign in, keeps the email, clears the password, and shows "Account created. Check your email for a confirmation link, then sign in." |
+| [signs in immediately when Supabase returns a session](../frontend/src/Login.test.jsx#L290) | If Supabase returns a session right away, the page confirms it with `/api/me` and shows "Signed in as …". |
 
 #### Callbacks to the app
 
 | Test | What it checks |
 |---|---|
-| [reports the signed-in email after signing in](../frontend/src/Login.test.jsx#L284) | `onSignedIn` is called once with the email, so the app can open the menu. |
-| [reports the signed-in email after a sign-up that returns a session](../frontend/src/Login.test.jsx#L297) | The same happens after a sign-up that signs the user in right away. |
-| [does not report a sign-in that Supabase rejects](../frontend/src/Login.test.jsx#L310) | A failed sign-in doesn't open the menu. |
-| [does not report a sign-in the backend cannot confirm](../frontend/src/Login.test.jsx#L322) | If `/api/me` fails, the menu isn't opened. |
-| [shows Browse menu only when the app provides it](../frontend/src/Login.test.jsx#L335) | The button appears and calls `onBrowse`. |
-| [hides Browse menu without a handler](../frontend/src/Login.test.jsx#L344) | Without `onBrowse`, there's no button. |
-| [disables Browse menu while signing in](../frontend/src/Login.test.jsx#L350) | The user can't leave mid-sign-in. |
+| [reports the signed-in email after signing in](../frontend/src/Login.test.jsx#L306) | `onSignedIn` is called once with the email, so the app can open the menu. |
+| [reports the signed-in email after a sign-up that returns a session](../frontend/src/Login.test.jsx#L319) | The same happens after a sign-up that signs the user in right away. |
+| [does not report a sign-in that Supabase rejects](../frontend/src/Login.test.jsx#L332) | A failed sign-in doesn't open the menu. |
+| [does not report a sign-in the backend cannot confirm](../frontend/src/Login.test.jsx#L344) | If `/api/me` fails, the menu isn't opened. |
+| [shows Browse menu only when the app provides it](../frontend/src/Login.test.jsx#L357) | The button appears and calls `onBrowse`. |
+| [hides Browse menu without a handler](../frontend/src/Login.test.jsx#L366) | Without `onBrowse`, there's no button. |
+| [disables Browse menu while signing in](../frontend/src/Login.test.jsx#L372) | The user can't leave mid-sign-in. |
 
 ### Menu page and checkout review: [Menu.test.jsx](../frontend/src/Menu.test.jsx)
 
@@ -569,7 +580,7 @@ Runs the same way, after every migration, in a transaction that is rolled back. 
 
 ## Database: [supabase/tests/roles.sql](../supabase/tests/roles.sql)
 
-Runs the same way, after every migration. It checks the student and kitchen roles, that only the kitchen can change an order's status or mark items sold out, and for US23 that a student can cancel their own Received order while the kitchen can neither reopen nor cancel it. It also checks the grant on `cancel_order`: `anon` and `public` cannot execute it and `authenticated` can. Calling it as `anon` would fail with 42501 even without the revoke, so only the grant check catches a missing revoke.
+Runs the same way, after every migration. For SEC-02 it checks that the database refuses an account for a non-Vanderbilt address (`someone@gmail.com`, `kitchen@puborder.test`, and the look-alike `vanderbilt.edu.evil.com`) and refuses changing an account's email to one, while accepting `@vanderbilt.edu` in any letter case. For SEC-01 it checks that every new account is a student, and grants the kitchen role with a direct `profiles` update, the only way staff get it. It then checks the student and kitchen roles, that only the kitchen can change an order's status or mark items sold out, and for US23 that a student can cancel their own Received order while the kitchen can neither reopen nor cancel it. It also checks the grant on `cancel_order`: `anon` and `public` cannot execute it and `authenticated` can. Calling it as `anon` would fail with 42501 even without the revoke, so only the grant check catches a missing revoke.
 
 ## E2E (Playwright)
 

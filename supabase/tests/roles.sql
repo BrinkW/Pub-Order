@@ -1,20 +1,54 @@
 -- Run after the migrations, in one transaction that is rolled back.
 begin;
 
-insert into auth.users (id, email) values
-  ('00000000-0000-4000-8000-00000000000a', 'order-test-a@example.com'),
-  ('00000000-0000-4000-8000-00000000000b', 'order-test-b@example.com'),
-  ('00000000-0000-4000-8000-00000000000c', 'kitchen@puborder.test');
+-- SEC-02: only @vanderbilt.edu addresses can create an account, or be switched to later.
+-- That also refuses the old shared kitchen email outright.
+do $$
+begin
+  begin
+    insert into auth.users (id, email) values ('00000000-0000-4000-8000-0000000000e1', 'someone@gmail.com');
+    raise exception 'SEC-02: a non-Vanderbilt sign-up was accepted';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into auth.users (id, email) values ('00000000-0000-4000-8000-0000000000e2', 'kitchen@puborder.test');
+    raise exception 'SEC-02: kitchen@puborder.test was allowed to register';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into auth.users (id, email) values ('00000000-0000-4000-8000-0000000000e3', 'student@vanderbilt.edu.evil.com');
+    raise exception 'SEC-02: a look-alike domain was accepted';
+  exception when check_violation then null;
+  end;
+end $$;
 
+insert into auth.users (id, email) values
+  ('00000000-0000-4000-8000-00000000000a', 'order-test-a@vanderbilt.edu'),
+  ('00000000-0000-4000-8000-00000000000b', 'Order-Test-B@Vanderbilt.edu'),
+  ('00000000-0000-4000-8000-00000000000c', 'kitchen-test@vanderbilt.edu');
+
+do $$
+begin
+  begin
+    update auth.users set email = 'order-test-a@gmail.com' where id = '00000000-0000-4000-8000-00000000000a';
+    raise exception 'SEC-02: an account was moved to a non-Vanderbilt address';
+  exception when check_violation then null;
+  end;
+end $$;
+
+-- SEC-01: every sign-up is a student, whatever its email.
 do $$
 begin
   if (select role from public.profiles where user_id = '00000000-0000-4000-8000-00000000000a') <> 'student' then
     raise exception 'A normal sign-up must be a student';
   end if;
-  if (select role from public.profiles where user_id = '00000000-0000-4000-8000-00000000000c') <> 'kitchen' then
-    raise exception 'The kitchen test account must be kitchen';
+  if (select role from public.profiles where user_id = '00000000-0000-4000-8000-00000000000c') <> 'student' then
+    raise exception 'SEC-01: a new account must never start as kitchen';
   end if;
 end $$;
+
+-- Kitchen access is granted only by a deliberate database change, as staff setup does it.
+update public.profiles set role = 'kitchen' where user_id = '00000000-0000-4000-8000-00000000000c';
 
 set local role anon;
 do $$
