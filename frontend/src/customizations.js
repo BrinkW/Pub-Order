@@ -6,12 +6,12 @@ function choice(id, label, text, included) {
 // saved only when it is removed, and an optional sauce is saved only when it is added.
 const ITEMS = {
   'beyond-burger-patty': {
-    hint: 'This order is the patty. Check any toppings you want with it.',
+    hint: '',
     options: [
-      choice('lettuce', 'Lettuce', 'Lettuce', false),
-      choice('tomato', 'Tomato', 'Tomato', false),
-      choice('onion', 'Onion', 'Onion', false),
-      choice('pickles', 'Pickles', 'Pickles', false),
+      choice('no-lettuce', 'Lettuce', 'No lettuce', true),
+      choice('no-tomato', 'Tomato', 'No tomato', true),
+      choice('no-onion', 'Onion', 'No onion', true),
+      choice('no-pickles', 'Pickles', 'No pickles', true),
       choice('ketchup', 'Ketchup', 'Ketchup', false),
     ],
   },

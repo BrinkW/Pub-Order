@@ -26,11 +26,9 @@ test('a student places an order, reopens its confirmation, and sees when it is r
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
-  await page.getByRole('button', { name: 'Add Philly Cheesesteak to cart' }).click();
-  await page.getByRole('button', { name: 'Add Straight Cut Fries to cart' }).click();
-  await page.getByRole('button', { name: 'Add Orange Juice to cart' }).click();
-  await page.getByRole('button', { name: 'Review checkout' }).click();
-  await page.getByRole('button', { name: 'Validate checkout' }).click();
+  await page.getByRole('button', { name: 'Add Philly Cheesesteak' }).click();
+  await page.getByRole('button', { name: 'Add Straight Cut Fries' }).click();
+  await page.getByRole('button', { name: 'Add Orange Juice' }).click();
   await page.getByRole('button', { name: 'Place order' }).click();
 
   // US4: confirmation of the saved order.

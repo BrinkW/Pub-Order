@@ -5,41 +5,33 @@ test.beforeEach(async ({ page }) => {
   await mockMenu(page);
 });
 
-function progress(page, label) {
-  return page.locator('.menu-swipe-progress span', { hasText: label }).locator('strong');
-}
-
-test('a student browses the menu, fills a meal swipe, and keeps the cart after a reload', async ({ page }) => {
+test('a student builds a meal one step at a time and keeps it after a reload', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: 'Browse menu' }).click();
 
   await expect(page.getByRole('heading', { name: 'What sounds good?' })).toBeVisible();
   await expect(page).toHaveURL(/#menu$/);
 
-  await page.getByRole('button', { name: 'Add Pub Burger to cart' }).click();
-  await page.getByRole('button', { name: 'Add Straight Cut Fries to cart' }).click();
-  await page.getByRole('button', { name: 'Add Sweet Tea to cart' }).click();
+  await page.getByRole('button', { name: 'Add Pub Burger' }).click();
+  await page.getByRole('button', { name: 'Add Straight Cut Fries' }).click();
+  await page.getByRole('button', { name: 'Add Sweet Tea' }).click();
 
-  await expect(page.getByRole('heading', { name: 'Your cart (3)' })).toBeVisible();
-  await expect(progress(page, 'Entries')).toHaveText('1/1');
-  await expect(progress(page, 'Sides')).toHaveText('1/1');
-  await expect(progress(page, 'Drinks')).toHaveText('1/1');
+  await expect(page.getByRole('heading', { name: 'Look over your order' })).toBeVisible();
 
   await page.reload();
 
-  await expect(page.getByRole('heading', { name: 'Your cart (3)' })).toBeVisible();
-  await expect(page.getByLabel('Pub Burger quantity', { exact: true })).toHaveText('1');
-  await expect(page.getByLabel('Sweet Tea quantity', { exact: true })).toHaveText('1');
+  await expect(page.getByRole('heading', { name: 'Your meal (3)' })).toBeVisible();
+  await expect(page.getByText('Pub Burger').first()).toBeVisible();
+  await expect(page.getByText('Sweet Tea').first()).toBeVisible();
 });
 
-test('search and category filters narrow the menu and can be reset', async ({ page }) => {
+test('search on the entrée step ignores other steps and can be cleared', async ({ page }) => {
   await page.goto('/#menu');
 
-  await page.getByRole('button', { name: 'Beverages', exact: true }).click();
-  await page.getByLabel('Find something delicious').fill('burger');
+  await page.getByRole('searchbox', { name: 'Search entrées…' }).fill('pretzel');
   await expect(page.getByText('No matches this time.')).toBeVisible();
 
-  await page.getByRole('button', { name: 'Reset filters' }).click();
+  await page.getByRole('button', { name: 'Clear search' }).click();
 
-  await expect(page.getByRole('article')).toHaveCount(catalog.length);
+  await expect(page.getByRole('article')).toHaveCount(catalog.filter((item) => item.swipeType === 'Entry').length);
 });

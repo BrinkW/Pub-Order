@@ -145,6 +145,13 @@ def test_complete_two_swipe_meal(client, database, signed_in, cart):
     assert client.post('/checkout/review', json=cart).json()['canSubmit'] is True
 
 
+def test_a_meal_can_skip_the_side(client, database, signed_in, cart):
+    cart["items"] = [item for item in cart["items"] if item["id"] != "fries"]
+    body = client.post("/checkout/review", json=cart).json()
+    assert body["canSubmit"] is True
+    assert body["counts"] == {"Entry": 1, "Side": 0, "Drink": 1}
+
+
 def test_under_and_over_filled_meals(client, database, signed_in, cart):
     for quantity in [1, 3]:
         cart['swipes'] = 2

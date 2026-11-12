@@ -10,10 +10,10 @@ LEGACY = {
 
 BY_ITEM = {
     "beyond-burger-patty": {
-        "lettuce": "Lettuce",
-        "tomato": "Tomato",
-        "onion": "Onion",
-        "pickles": "Pickles",
+        "no-lettuce": "No lettuce",
+        "no-tomato": "No tomato",
+        "no-onion": "No onion",
+        "no-pickles": "No pickles",
         "ketchup": "Ketchup",
     },
     "chicken-sandwich": {

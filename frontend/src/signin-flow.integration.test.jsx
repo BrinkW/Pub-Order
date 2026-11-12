@@ -60,13 +60,13 @@ describe('Sign in to menu', () => {
     expect(window.location.hash).toBe('#menu');
     expect(fetch).toHaveBeenCalledWith('/api/me', { headers: { Authorization: 'Bearer token-1' } });
 
-    await user.click(await screen.findByRole('button', { name: 'Add Pub Burger to cart' }));
+    await user.click(await screen.findByRole('button', { name: 'Add Pub Burger' }));
     expect(JSON.parse(window.localStorage.getItem(CART_STORAGE_KEY)).items).toEqual({ 'pub-burger': 1 });
 
     await user.click(screen.getByRole('button', { name: 'Back to login' }));
     await user.click(screen.getByRole('button', { name: 'Browse menu' }));
 
-    expect(screen.getByLabelText('Pub Burger quantity')).toHaveTextContent('1');
+    expect(screen.getByRole('heading', { name: 'Your meal (1)' })).toBeInTheDocument();
   });
 
   it('stays on the login page when the backend rejects the session', async () => {

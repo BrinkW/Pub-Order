@@ -93,6 +93,7 @@ Covers `GET /menu` and `POST /checkout/review` in [app/menu.py](../backend/app/m
 | [`test_empty_and_duplicate_carts`](../backend/tests/test_menu_checkout.py#L106) | Empty carts and carts listing an item twice are rejected. |
 | [`test_catalog_changes_block_checkout`](../backend/tests/test_menu_checkout.py#L113) ×3 | A deleted, unavailable or reclassified item blocks checkout with an issue for that item. |
 | [`test_complete_two_swipe_meal`](../backend/tests/test_menu_checkout.py#L125) | Two of each part on two swipes passes. |
+| [`test_a_meal_can_skip_the_side`](../backend/tests/test_menu_checkout.py#L148) | A meal with an entrée and a drink but no side passes review, with 0 counted as sides. |
 | [`test_under_and_over_filled_meals`](../backend/tests/test_menu_checkout.py#L132) | Too few or too many of one part fails with a composition issue. |
 | [`test_review_fails_without_database`](../backend/tests/test_menu_checkout.py#L141) | A database outage during review returns 503. |
 | [`test_extra_client_fields_rejected`](../backend/tests/test_menu_checkout.py#L146) | Extra fields sent by the browser are rejected with 422. |
@@ -250,7 +251,7 @@ Contains no tests. Vitest runs it before every test file (configured in the `tes
 
 ### Cart rules: [cart.test.js](../frontend/src/cart.test.js)
 
-Covers [cart.js](../frontend/src/cart.js), which enforces the meal-swipe rules: each swipe covers one Entry, one Side and one Drink, up to 10 swipes. Every function takes the current menu, and changes that break a rule are rejected (the cart is returned unchanged). The first 14 tests came from the menu-and-checkout work; the rest are boundary and edge cases. `npm run test:cart` runs this file alone.
+Covers [cart.js](../frontend/src/cart.js), which enforces the meal-swipe rules: each swipe needs one Entry and one Drink, and the Side is optional (no sides, or one per swipe), up to 10 swipes. Every function takes the current menu, and changes that break a rule are rejected (the cart is returned unchanged). The first 14 tests came from the menu-and-checkout work; the rest are boundary and edge cases. `npm run test:cart` runs this file alone.
 
 | Test | What it checks |
 |---|---|
@@ -283,9 +284,12 @@ Covers [cart.js](../frontend/src/cart.js), which enforces the meal-swipe rules: 
 | [keeps reviewed types only for items in the cart and only valid types](../frontend/src/cart.test.js#L158) | Stale or invalid saved swipe types are dropped. |
 | [items no longer on the menu are listed but do not count toward a meal](../frontend/src/cart.test.js#L165) | Removed items show as unavailable and don't fill a meal slot. |
 | [search matches dietary labels](../frontend/src/cart.test.js#L172) | Searching "vegan" finds exactly the Vegan items. |
-| [an empty search with a category returns exactly that category](../frontend/src/cart.test.js#L178) | A category filter alone returns only that category. |
-| [a complete two-swipe meal passes review](../frontend/src/cart.test.js#L184) | Two of each part on two swipes has no errors. |
-| [review explains which part of the meal is short](../frontend/src/cart.test.js#L189) | A missing drink produces exactly one clear message. |
+| [an empty search with a category returns exactly that category](../frontend/src/cart.test.js#L185) | A category filter alone returns only that category. |
+| [a complete two-swipe meal passes review](../frontend/src/cart.test.js#L191) | Two of each part on two swipes has no errors. |
+| [adding fills a swipe without replacing the other choices](../frontend/src/cart.test.js#L196) | With 3 swipes, adding the same entrée twice gives 2 of it, and adding a side keeps both entrées. |
+| [a meal can leave the side out](../frontend/src/cart.test.js#L207) | An entrée and a drink with no side pass review. |
+| [too many sides is still rejected](../frontend/src/cart.test.js#L211) | Two sides on one swipe gives "This order can only include one side." |
+| [review explains which part of the meal is short](../frontend/src/cart.test.js#L215) | Two swipes with one drink gives exactly one message: "This order needs 2 drinks. It has 1." |
 
 The last four cart tests cover the **checkout key**: `withCheckoutKey` adds one UUID and keeps it; a saved key survives a restore but an invalid one is dropped; changing the cart drops the key (it becomes a new order); a rejected change keeps it.
 
@@ -374,51 +378,45 @@ Covers loading the menu from `/api/menu`, [Menu.jsx](../frontend/src/Menu.jsx) a
 
 | Test | What it checks |
 |---|---|
-| [shows loading, then database items and combined search/category filters](../frontend/src/Menu.test.jsx#L37) | "Loading menu…" first, then the items; search and category filters combine, and Reset filters works. |
-| [shows empty catalog and disables empty checkout](../frontend/src/Menu.test.jsx#L50) | An empty menu shows a message and checkout is disabled. |
+| [shows loading, then the entrée step, and search narrows that step](../frontend/src/Menu.test.jsx#L38) | "Loading menu…" first, then only the entrées (sides wait for their step); a search with no match says so, and **Clear search** brings the items back. |
+| [shows empty catalog and disables empty checkout](../frontend/src/Menu.test.jsx#L49) | An empty menu shows a message and **Look over your order** is disabled. |
 | [shows a failed menu request and retries successfully](../frontend/src/Menu.test.jsx#L55) | A failed load shows **Retry menu**, which works. |
 | [rejects malformed menu responses](../frontend/src/Menu.test.jsx#L60) | A bad response from `/api/menu` shows an error instead of broken items. |
 | [cannot add unavailable items](../frontend/src/Menu.test.jsx#L64) | Unavailable items can't be added. |
-| [shows quantities and total, checks server, and retains cart after success](../frontend/src/Menu.test.jsx#L68) | Checkout review shows the meal, sends it to the server with the login token, and keeps the cart. |
-| [blocks empty, invalid, or incomplete checkout](../frontend/src/Menu.test.jsx#L79) ×6 | Bad or incomplete carts can't be validated, and nothing is sent. |
+| [shows quantities and total, checks server, and retains cart after success](../frontend/src/Menu.test.jsx#L92) | The review shows the meal, sends it to the server with the login token, enables **Place order** without a "looks good" banner, and keeps the cart. |
+| [blocks empty, invalid, or incomplete checkout](../frontend/src/Menu.test.jsx#L103) ×6 | Bad or incomplete carts disable **Place order**, and nothing is sent. |
 | [asks guest to sign in without discarding cart](../frontend/src/Menu.test.jsx#L83) | Guests are asked to sign in, and the cart stays. |
 | [expired server session requires sign-in](../frontend/src/Menu.test.jsx#L90) | A 401 from the server asks the student to sign in again. |
 | [blocks changed types and unavailable items until reviewed](../frontend/src/Menu.test.jsx#L95) | Menu changes found by the server must be reviewed before continuing. |
-| [handles failed validation and allows retry](../frontend/src/Menu.test.jsx#L107) | A failed check shows the error and can be retried. |
+| [handles a failed menu check and lets place order try again](../frontend/src/Menu.test.jsx#L128) | A failed server check shows the error, and **Place order** stays available to try again. |
 | [ignores stale validation response after cart changes](../frontend/src/Menu.test.jsx#L114) | A slow answer for an old cart is ignored. |
 | [preserves checkout through login navigation when storage is blocked](../frontend/src/Menu.test.jsx#L123) | Signing in from checkout keeps the review, even with browser storage blocked. |
-| [builds a meal through clicks and the header returns from checkout to cart](../frontend/src/Menu.test.jsx#L137) | A meal built by clicking can be reviewed, and the header Cart button returns to the cart. |
+| [builds a meal through clicks and the header returns from checkout to the summary](../frontend/src/Menu.test.jsx#L158) | Clicking an entrée, a side and a drink opens the review with each part, and the header **Your meal** button returns focus to the meal summary. |
 | [refreshes catalog without dropping a saved cart or its reviewed classifications](../frontend/src/Menu.test.jsx#L150) | **Refresh menu** keeps the cart and marks newly unavailable items. |
 
 ### Menu page with the full menu: [Menu.cart.test.jsx](../frontend/src/Menu.cart.test.jsx)
 
-Covers browsing and building a cart in [Menu.jsx](../frontend/src/Menu.jsx) with the full seed menu served as `/api/menu`. Browser storage is cleared before each test.
+Covers building a meal step by step (entrée, side, drink, then review) in [Menu.jsx](../frontend/src/Menu.jsx) with the full seed menu served as `/api/menu`. Browser storage is cleared before each test.
 
 | Test | What it checks |
 |---|---|
-| [shows every menu item](../frontend/src/Menu.cart.test.jsx#L42) | All items from the menu are listed with the right count. |
-| [builds the category buttons from the menu and filters by category](../frontend/src/Menu.cart.test.jsx#L49) | Category buttons come from the menu; one shows only its items. |
-| [falls back to a placeholder when an image fails to load](../frontend/src/Menu.cart.test.jsx#L60) | A broken photo is replaced with a "No image" placeholder. |
-| [adds an item and updates the cart, header count, and notice](../frontend/src/Menu.cart.test.jsx#L71) | Adding updates the cart, the header's cart count, and the announcement. |
-| [shows how many of an item are in the cart while more can be added](../frontend/src/Menu.cart.test.jsx#L82) | The add button shows "1 in cart". |
-| [blocks more items of a full type but not other types](../frontend/src/Menu.cart.test.jsx#L91) | After one Entry on one swipe, other Entries show "Entry limit reached"; Sides and Drinks stay available. |
-| [shows progress for each part of a meal swipe](../frontend/src/Menu.cart.test.jsx#L102) | Entries, Sides and Drinks each show 1/1. |
-| [cannot go below one swipe](../frontend/src/Menu.cart.test.jsx#L116) | The − button is disabled at 1 swipe. |
-| [raising swipes allows another item of the same type](../frontend/src/Menu.cart.test.jsx#L123) | A second swipe re-enables Entries. |
-| [cannot drop below the number of items of the busiest type](../frontend/src/Menu.cart.test.jsx#L133) | With 2 Entries, swipes can't go below 2. |
-| [stops at 10 swipes](../frontend/src/Menu.cart.test.jsx#L143) | The + button is disabled at the maximum. |
-| [changes quantity within the swipe allowance](../frontend/src/Menu.cart.test.jsx#L157) | Cart +/− change the quantity, and + stops at the limit. |
-| [decreasing to zero empties the cart](../frontend/src/Menu.cart.test.jsx#L172) | Removing the last item shows the empty cart. |
-| [removes a single item](../frontend/src/Menu.cart.test.jsx#L181) | **Remove** takes out one item and leaves the rest. |
-| [clears the whole cart](../frontend/src/Menu.cart.test.jsx#L193) | **Clear cart** empties it, announces it, and saves the empty cart. |
-| [saves changes to browser storage](../frontend/src/Menu.cart.test.jsx#L208) | The cart is saved to localStorage after each change. |
-| [restores a saved cart](../frontend/src/Menu.cart.test.jsx#L217) | A saved cart is shown when the page opens. |
-| [starts empty when the saved cart is corrupt](../frontend/src/Menu.cart.test.jsx#L226) | Broken saved data gives an empty cart instead of an error. |
-| [explains when browser storage is unavailable](../frontend/src/Menu.cart.test.jsx#L235) | If saving fails (e.g. private browsing), the page says so. |
-| [shows the signed-in email and a way back to login](../frontend/src/Menu.cart.test.jsx#L247) | Signed-in users see their email, and **Back to login** works. |
-| [offers sign in when browsing without an account](../frontend/src/Menu.cart.test.jsx#L258) | Guests see **Sign in** instead. |
-| [the header cart button moves focus to the cart](../frontend/src/Menu.cart.test.jsx#L265) | The header's Cart button focuses the cart heading. |
-| [the skip link moves focus to the menu](../frontend/src/Menu.cart.test.jsx#L273) | The "Skip to menu" link works for keyboard users. |
+| [starts on entrées and hides sides and drinks](../frontend/src/Menu.cart.test.jsx#L36) | The menu opens on the Entrée step and lists only entrées; sides and drinks wait for their steps. |
+| [choosing a main moves to sides, and skipping a side moves to drinks](../frontend/src/Menu.cart.test.jsx#L44) | Adding an entrée moves to the Side step; **No side** saves the meal without a side and moves to Drinks. |
+| [extra meal swipes stay on a step until that many items are added](../frontend/src/Menu.cart.test.jsx#L61) | With 3 swipes, each step stays open ("1 of 3") until 3 items are added, then moves on; 3 drinks open the review for 3 meal swipes. |
+| [a main, a side, and a drink open the review in plain language](../frontend/src/Menu.cart.test.jsx#L94) | A full meal opens **Look over your order** with **Place order** and no **Check my order** button. |
+| [search only looks through the current step](../frontend/src/Menu.cart.test.jsx#L106) | Searching for a side on the entrée step finds nothing; **Clear search** brings the entrées back. |
+| [falls back to a placeholder when an image fails to load](../frontend/src/Menu.cart.test.jsx#L116) | A broken photo is replaced with a placeholder image. |
+| [shows every Pub marker instead of only one dietary label](../frontend/src/Menu.cart.test.jsx#L124) | An item shows all of its allergen and preference markers. |
+| [clears the order and saves a choice](../frontend/src/Menu.cart.test.jsx#L133) | Each choice is saved to browser storage; **Clear order** empties the meal, says so, and saves the empty meal. |
+| [shows a saved main on the meal summary](../frontend/src/Menu.cart.test.jsx#L149) | A saved meal is shown on the summary when the page opens. |
+| [starts empty when the saved order is corrupt](../frontend/src/Menu.cart.test.jsx#L158) | Broken saved data gives an empty meal instead of an error. |
+| [explains when browser storage is unavailable](../frontend/src/Menu.cart.test.jsx#L167) | If saving fails (e.g. private browsing), the page says so. |
+| [shows the signed-in email and a way back to login](../frontend/src/Menu.cart.test.jsx#L179) | Signed-in users see their email, and **Back to login** works. |
+| [offers sign in when browsing without an account](../frontend/src/Menu.cart.test.jsx#L190) | Guests see **Sign in** instead. |
+| [the header meal button moves focus to the summary](../frontend/src/Menu.cart.test.jsx#L197) | The header's **Your meal** button focuses the meal summary heading. |
+| [the skip link moves focus to the menu](../frontend/src/Menu.cart.test.jsx#L205) | The "Skip to menu" link works for keyboard users. |
+| [gives burgers toppings and chicken its own sauces](../frontend/src/Menu.cart.test.jsx#L220) | The burger's toppings start checked and it has no chicken sauces; sides have no **Customize**; a sauce added to the tenders shows on the meal. |
+| [keeps tartar sauce on the cod unless it is unchecked](../frontend/src/Menu.cart.test.jsx#L247) | The cod starts with tartar sauce checked and offers only its own options. |
 
 ### Placing an order: [place-order.test.jsx](../frontend/src/place-order.test.jsx)
 
@@ -576,7 +574,7 @@ The backend CI job runs this script against the local test database, after `supa
 
 ## Database: [supabase/tests/orders.sql](../supabase/tests/orders.sql)
 
-Runs the same way, after every migration, in a transaction that is rolled back. It checks the `orders` table constraints, that guests can't read or place orders, that students place orders only through `place_order` (a retry with the same key returns the same order, the student's email and customizations are stored, incomplete meals and unknown items are refused), and that one student can't see another's orders. For SEC-03 it checks the order limits inside `place_order`: a 4th order in progress is refused (errcode PT429, detail `open_orders`) while a retry of a placed order still works; once an order is picked up the student can order again; and a 6th order in 10 minutes is refused (detail `recent_orders`) even with room in progress.
+Runs the same way, after every migration, in a transaction that is rolled back. It checks the `orders` table constraints, that guests can't read or place orders, that students place orders only through `place_order` (a retry with the same key returns the same order, the student's email and customizations are stored, incomplete meals and unknown items are refused), and that one student can't see another's orders. A meal can leave out the side (no sides, or one per meal swipe), while one side for two swipes or a meal without an entrée is refused. For SEC-03 it checks the order limits inside `place_order`: a 4th order in progress is refused (errcode PT429, detail `open_orders`) while a retry of a placed order still works; once an order is picked up the student can order again; and a 6th order in 10 minutes is refused (detail `recent_orders`) even with room in progress.
 
 ## Database: [supabase/tests/roles.sql](../supabase/tests/roles.sql)
 
@@ -606,14 +604,14 @@ Location: [frontend/e2e/](../frontend/e2e/). Run with `npm run test:e2e` from `f
 | Test | What it checks |
 |---|---|
 | [the app loads on the login page](../frontend/e2e/smoke.spec.js#L4) | The app starts and shows the login page and **Browse menu**. |
-| [a student browses the menu, fills a meal swipe, and keeps the cart after a reload](../frontend/e2e/menu-cart.spec.js#L12) | Browse → add an Entry, Side and Drink → each shows 1/1 → reload the page → the cart is still there. |
-| [search and category filters narrow the menu and can be reset](../frontend/e2e/menu-cart.spec.js#L35) | A search with no results shows **Reset filters**, which brings back every item. |
-| [meal swipes limit each part of the meal and can be raised](../frontend/e2e/swipe-limits.spec.js#L4) | A second Entry is blocked → adding a swipe allows it → swipes can't drop below what's in the cart → clearing the cart frees them. |
-| [a guest reviews a full meal and is asked to sign in without losing it](../frontend/e2e/checkout.spec.js#L9) | Build a meal → Review checkout → Validate → asked to sign in → go to login and back → the review and cart are still there. |
-| [an incomplete meal cannot be validated and says what is missing](../frontend/e2e/checkout.spec.js#L29) | An Entry alone shows which parts are missing, and Validate is disabled. |
+| [a student builds a meal one step at a time and keeps it after a reload](../frontend/e2e/menu-cart.spec.js#L8) | Browse → add an entrée, a side and a drink, one step each → the review opens → reload the page → the meal is still there. |
+| [search on the entrée step ignores other steps and can be cleared](../frontend/e2e/menu-cart.spec.js#L28) | Searching for a side on the entrée step finds nothing; **Clear search** brings back every entrée. |
+| [choosing a main moves to sides, and a sold-out main cannot be chosen](../frontend/e2e/swipe-limits.spec.js#L4) | Adding an entrée moves to the Side step and hides the other entrées → back on the entrée step, **Clear order** empties the meal and entrées can be added again. |
+| [a guest reviews a full meal and is asked to sign in without losing it](../frontend/e2e/checkout.spec.js#L9) | Build a meal → the review opens → asked to sign in → go to login and back → the review and meal are still there. |
+| [an incomplete meal cannot be sent and says what is missing](../frontend/e2e/checkout.spec.js#L27) | An entrée with **No side** says only that a drink is missing (a side is optional), and **Place order** is disabled. |
 | [a student signs in and lands on the menu](../frontend/e2e/sign-in.spec.js#L8) | A real sign-in through Supabase and the backend opens the menu with "Signed in as …". |
-| [a signed-in student builds a meal from the database menu and the server validates it](../frontend/e2e/full-stack.spec.js#L10) | The whole stack with nothing faked: sign in → the 22 menu items load from the database → build a meal → the server confirms it's valid. |
-| [a signed-in student places an order and it is saved](../frontend/e2e/full-stack.spec.js#L28) | Sign in → build a meal → validate → **Place order** → "Order received" with the items → back on the menu the cart is empty, also after a reload. |
+| [a signed-in student builds a meal from the database menu and the server validates it](../frontend/e2e/full-stack.spec.js#L10) | The whole stack with nothing faked: sign in → the 11 entrées load from the database → build a meal → the server's check enables **Place order**. |
+| [a signed-in student places an order and it is saved](../frontend/e2e/full-stack.spec.js#L26) | Sign in → build a meal → **Place order** → "Order received" with the items → back on the menu the cart is empty, also after a reload. |
 | [a student places an order, reopens its confirmation, and sees when it is ready for pickup](../frontend/e2e/order-tracking.spec.js#L23) | **US4 + US6, nothing faked:** place an order → confirmation → reload reads it back from the database → the stored status is changed to Preparing, then Ready → **Refresh status** shows each → My orders lists it as Ready for pickup. |
 | [a made-up order link shows not found instead of an order](../frontend/e2e/order-tracking.spec.js#L70) | **Failure path:** an order id that isn't the student's shows "We couldn't find that order". |
 

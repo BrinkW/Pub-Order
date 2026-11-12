@@ -67,6 +67,20 @@ def review_checkout(cart: CheckoutRequest, user=Depends(get_current_user)):
     return review_cart(cart)
 
 
+_KIND = {"Entry": "entrée", "Side": "side", "Drink": "drink"}
+_KINDS = {"Entry": "entrées", "Side": "sides", "Drink": "drinks"}
+
+
+def _composition_message(kind: str, needed: int, have: int) -> str:
+    singular = _KIND[kind]
+    plural = _KINDS[kind]
+    if needed == 1 and have == 0:
+        return f"Add {'an' if kind == 'Entry' else 'a'} {singular} before sending this order."
+    if needed == 1:
+        return f"This order can only include one {singular}."
+    return f"This order needs {needed} {plural}. It has {have}."
+
+
 def review_cart(cart: CheckoutRequest) -> dict[str, Any]:
     """Check a cart against the current menu. Shared by checkout review and order placement."""
     ids = [item.id for item in cart.items]
@@ -82,7 +96,7 @@ def review_cart(cart: CheckoutRequest) -> dict[str, Any]:
             issues.append({
                 "id": requested.id,
                 "code": "unavailable",
-                "message": f"{requested.id} is no longer on the menu. Remove it before continuing.",
+                "message": f"{requested.id} is no longer on the menu. Take it off your order.",
             })
             continue
         items.append({**current.model_dump(), "quantity": requested.quantity})
@@ -91,19 +105,21 @@ def review_cart(cart: CheckoutRequest) -> dict[str, Any]:
             issues.append({
                 "id": current.id,
                 "code": "unavailable",
-                "message": f"{current.name} is unavailable. Remove it before continuing.",
+                "message": f"{current.name} is sold out. Pick something else.",
             })
         if current.swipeType != requested.expectedSwipeType:
             issues.append({
                 "id": current.id,
                 "code": "changed",
-                "message": f"{current.name} now counts as {current.swipeType}. "
-                "Review the updated meal before continuing.",
+                "message": f"{current.name} is now a {_KIND[current.swipeType]}. Look over your order again.",
             })
     for kind, count in counts.items():
+        # A side can be skipped. Entrées and drinks still have to match the meal swipes.
+        if kind == "Side" and count == 0:
+            continue
         if count != cart.swipes:
             issues.append({
                 "code": "composition",
-                "message": f"Choose exactly {cart.swipes} {kind.lower()} item(s); your cart has {count}.",
+                "message": _composition_message(kind, cart.swipes, count),
             })
     return {"items": items, "swipes": cart.swipes, "counts": counts, "issues": issues, "canSubmit": not issues}

@@ -180,7 +180,7 @@ def test_a_sauce_is_saved_only_for_the_item_that_offers_it():
     assert orders.customization_text("pub-burger", ["no-cheese", "no-onion", "ketchup"]) == (
         "No cheese, No onion, Ketchup"
     )
-    assert orders.customization_text("beyond-burger-patty", ["ranch", "lettuce"]) == "Lettuce"
+    assert orders.customization_text("beyond-burger-patty", ["ranch", "no-lettuce"]) == "No lettuce"
 
 
 def test_unchecked_ingredients_are_saved_as_no_labels(client, menu_database, database, signed_in):

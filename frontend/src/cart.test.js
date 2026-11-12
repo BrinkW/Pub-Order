@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { MENU_ITEMS } from './menu-data.js';
-import { filterMenu, getCartSummary, MAX_SWIPES, restoreCart, setCustomizations, setQuantity, setSwipes, checkoutErrors, emptyCart, withCheckoutKey } from './cart.js';
+import { addToMeal, filterMenu, getCartSummary, MAX_SWIPES, restoreCart, setCustomizations, setQuantity, setSwipes, checkoutErrors, emptyCart, withCheckoutKey } from './cart.js';
 const menu = MENU_ITEMS.map((item) => ({ ...item, available: true }));
 const meal = () => ({ swipes: 1, items: { 'pub-burger': 1, 'straight-cut-fries': 1, 'sweet-tea': 1 }, reviewedTypes: {} });
 
@@ -61,7 +61,7 @@ test('empty, incomplete, over-capacity, and invalid carts cannot pass review', (
   for (const cart of [emptyCart(), { ...meal(), swipes: 2 }, { ...meal(), swipes: 0 }, { ...meal(), items: { 'pub-burger': 1.5 } }, { ...meal(), items: { ...meal().items, 'pub-burger': 2 } }]) expect(checkoutErrors(cart, menu).length).toBeGreaterThan(0);
 });
 test('unavailable items fail review', () => {
-  expect(checkoutErrors(meal(), menu.map((i) => ({ ...i, available: i.id !== 'pub-burger' })))[0]).toMatch(/unavailable/);
+    expect(checkoutErrors(meal(), menu.map((i) => ({ ...i, available: i.id !== 'pub-burger' })))[0]).toMatch(/sold out/);
 });
 test('quantity edits preserve original classification for server change detection', () => {
   let cart = setQuantity(emptyCart(), 'pub-burger', 1, menu);
@@ -193,9 +193,28 @@ describe('summary, search, and review details', () => {
     expect(checkoutErrors(cart, menu)).toEqual([]);
   });
 
-  test('review explains which part of the meal is short', () => {
+  test('adding fills a swipe without replacing the other choices', () => {
+  const burger = menu.find((item) => item.id === 'pub-burger');
+  const fries = menu.find((item) => item.id === 'straight-cut-fries');
+  let cart = setSwipes(emptyCart(), 3, menu);
+  cart = addToMeal(cart, burger, menu);
+  cart = addToMeal(cart, burger, menu);
+  expect(cart.swipes).toBe(3);
+  expect(cart.items['pub-burger']).toBe(2);
+  cart = addToMeal(cart, fries, menu);
+  expect(cart.items).toEqual({ 'pub-burger': 2, 'straight-cut-fries': 1 });
+});
+test('a meal can leave the side out', () => {
+  const cart = { swipes: 1, items: { 'pub-burger': 1, 'sweet-tea': 1 }, reviewedTypes: {} };
+  expect(checkoutErrors(cart, menu)).toEqual([]);
+});
+test('too many sides is still rejected', () => {
+  const cart = { swipes: 1, items: { 'pub-burger': 1, 'straight-cut-fries': 1, 'pretzel-sticks': 1, 'sweet-tea': 1 }, reviewedTypes: {} };
+  expect(checkoutErrors(cart, menu)).toEqual(['This order can only include one side.']);
+});
+test('review explains which part of the meal is short', () => {
     const cart = cartWith(2, { 'pub-burger': 2, 'straight-cut-fries': 2, 'sweet-tea': 1 });
-    expect(checkoutErrors(cart, menu)).toEqual(['Choose exactly 2 drink item(s); your cart has 1.']);
+    expect(checkoutErrors(cart, menu)).toEqual(['This order needs 2 drinks. It has 1.']);
   });
 });
 

@@ -160,7 +160,7 @@ def place_order(
     except APIError as exc:
         if exc.code == INVALID_ORDER:
             raise HTTPException(409, {
-                "message": "The menu changed while you were ordering. Review your meal and try again.",
+                "message": "The menu changed while you were ordering. Look over your order and try again.",
                 "issues": [],
             }) from exc
         if exc.code == TOO_MANY_ORDERS:
