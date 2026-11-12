@@ -7,7 +7,7 @@ test('choosing a main moves to sides, and a sold-out main cannot be chosen', asy
 
   await page.getByRole('button', { name: 'Add Pub Burger' }).click();
 
-  await expect(page.getByRole('button', { name: 'Side' })).toHaveAttribute('aria-current', 'step');
+  await expect(page.getByRole('button', { name: 'Side', exact: true })).toHaveAttribute('aria-current', 'step');
   await expect(page.getByRole('button', { name: 'Add Straight Cut Fries' })).toBeEnabled();
   await expect(page.getByRole('button', { name: 'Add Chicken Tenders' })).toHaveCount(0);
 

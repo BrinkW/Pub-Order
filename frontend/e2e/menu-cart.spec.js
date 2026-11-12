@@ -28,7 +28,7 @@ test('a student builds a meal one step at a time and keeps it after a reload', a
 test('search on the entrée step ignores other steps and can be cleared', async ({ page }) => {
   await page.goto('/#menu');
 
-  await page.getByRole('searchbox', { name: 'Search entrées…' }).fill('fries');
+  await page.getByRole('searchbox', { name: 'Search entrées…' }).fill('pretzel');
   await expect(page.getByText('No matches this time.')).toBeVisible();
 
   await page.getByRole('button', { name: 'Clear search' }).click();

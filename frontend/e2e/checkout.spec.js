@@ -12,7 +12,7 @@ test('a guest reviews a full meal and is asked to sign in without losing it', as
   await page.getByRole('button', { name: 'Add Sweet Tea' }).click();
 
   await expect(page.getByRole('heading', { name: 'Look over your order' })).toBeVisible();
-  await expect(page.getByText('1 meal swipe')).toBeVisible();
+  await expect(page.getByText('1 meal swipe', { exact: true })).toBeVisible();
 
   await expect(page.getByText('Sign in to continue. Your cart will stay here.')).toBeVisible();
 
