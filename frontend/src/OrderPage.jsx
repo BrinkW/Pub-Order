@@ -11,7 +11,7 @@ import {
 } from './order-status.js';
 
 export default function OrderPage({
-  orderId, initialOrder, justPlaced, email, liveUpdate, onBackToMenu, onViewOrders, onSignIn,
+  orderId, initialOrder, justPlaced, email, liveUpdate, onBackToMenu, onViewOrders, onReorder, onSignIn,
 }) {
   const startingOrder = initialOrder?.id === orderId ? initialOrder : null;
   const [order, setOrder] = useState(startingOrder);
@@ -156,6 +156,7 @@ export default function OrderPage({
         {state === 'ready' && order && <OrderDetails
           order={order} justPlaced={justPlaced} heading={heading} error={error} checkedAt={checkedAt}
           refreshing={refreshing} onRefresh={() => refresh()} onBackToMenu={onBackToMenu} onViewOrders={onViewOrders}
+          onReorder={onReorder}
           cancelling={cancelling} cancelError={cancelError} onCancel={cancel}
         />}
 
@@ -166,7 +167,7 @@ export default function OrderPage({
 }
 
 function OrderDetails({
-  order, justPlaced, heading, error, checkedAt, refreshing, onRefresh, onBackToMenu, onViewOrders,
+  order, justPlaced, heading, error, checkedAt, refreshing, onRefresh, onBackToMenu, onViewOrders, onReorder,
   cancelling, cancelError, onCancel,
 }) {
   const message = statusMessage(order.status);
@@ -216,7 +217,9 @@ function OrderDetails({
 
     {cancelError && <p className="order-refresh-error" role="alert">{cancelError}</p>}
     <div className="order-actions">
-      <button className="menu-add" onClick={onBackToMenu}>Order something else</button>
+      {/* US-29: a finished order can go straight back into the menu as a new order. */}
+      {!isOpenOrder(order) && onReorder && <button className="menu-add" onClick={() => onReorder(order)}>Order this again</button>}
+      <button className={isOpenOrder(order) || !onReorder ? 'menu-add' : 'menu-text-button'} onClick={onBackToMenu}>Order something else</button>
       <button className="menu-text-button" onClick={onViewOrders}>View all my orders</button>
       {canCancel(order) && <button className="menu-text-button" disabled={cancelling} onClick={onCancel}>
         {cancelling ? 'Cancelling…' : 'Cancel order'}

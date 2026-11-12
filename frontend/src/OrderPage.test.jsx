@@ -387,3 +387,22 @@ describe('US4 browser alerts opt-in', () => {
     expect(screen.queryByRole('button', { name: 'Turn on browser alerts' })).not.toBeInTheDocument();
   });
 });
+
+describe('US-29 order again from the order page', () => {
+  it('offers Order this again on a picked-up order and hands it back', async () => {
+    const onReorder = vi.fn();
+    loadOrder.mockResolvedValue({ order: saved('Collected') });
+    renderPage({ onReorder });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Order this again' }));
+
+    expect(onReorder).toHaveBeenCalledWith(expect.objectContaining({ id: ID, status: 'Collected' }));
+  });
+
+  it('does not offer it while the order is still in progress', async () => {
+    renderPage({ onReorder: vi.fn() });
+
+    await screen.findByRole('heading', { name: 'Waiting for the kitchen' });
+    expect(screen.queryByRole('button', { name: 'Order this again' })).not.toBeInTheDocument();
+  });
+});

@@ -597,6 +597,14 @@ Runs the same way. For US4 it checks that the `orders` table is published to Sup
 | [frontend/src/OrderNotices.test.jsx](../frontend/src/OrderNotices.test.jsx), [OrderPage.test.jsx](../frontend/src/OrderPage.test.jsx) | The corner notices open or dismiss; the order page re-reads on a live update for its order and offers browser alerts only for an open order. |
 | [frontend/src/order-tracking.integration.test.jsx](../frontend/src/order-tracking.integration.test.jsx) | The whole app: a Realtime update shows a Ready notice on the menu that opens the order, and updates an open order page without a notice. |
 
+## Order again (US-29)
+
+| File | What it checks |
+|---|---|
+| [frontend/src/reorder.test.js](../frontend/src/reorder.test.js) | A past order comes back with its swipes, quantities, meal parts and customizations, as a new order (no old checkout key). Sold-out items and items no longer on the menu are left out with a reason. "No side" is kept only when the old order had no side on purpose. Limits are capped, and the menu opens on the first step that's missing something, or on review. |
+| [frontend/src/MyOrders.test.jsx](../frontend/src/MyOrders.test.jsx), [OrderPage.test.jsx](../frontend/src/OrderPage.test.jsx) | Order again shows only on finished orders and hands that order to the app. |
+| [frontend/src/order-tracking.integration.test.jsx](../frontend/src/order-tracking.integration.test.jsx) | The whole app: Order again from My orders fills the cart, opens review and places it as a new order; a sold-out side is left out with a message and the Side step opens; the order page offers it for a picked-up order but not one in progress. |
+
 ## E2E (Playwright)
 
 Location: [frontend/e2e/](../frontend/e2e/). Run with `npm run test:e2e` from `frontend/`. Playwright starts the Vite dev server itself; with a test user set (as in CI, against the local Supabase), it also starts the backend on port 8001. Configuration is in [playwright.config.js](../frontend/playwright.config.js). Each test gets a fresh browser profile, so carts don't carry between tests. [menu-fixture.js](../frontend/e2e/menu-fixture.js) answers the browser's `/api/menu` request with the seed menu, so most journeys don't need the backend or database. The sign-in and full-stack journeys use the real ones.

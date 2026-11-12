@@ -5,6 +5,7 @@ import CustomizeDialog from './CustomizeDialog.jsx';
 import NutritionDialog from './NutritionDialog.jsx';
 import { loadMenu } from './menu-api.js';
 import { optionsFor } from './customizations.js';
+import { reorderCart, reorderMessage, stepAfterReorder } from './reorder.js';
 import { CART_STORAGE_KEY, MAX_SWIPES, addToMeal, chooseNoSide, emptyCart, filterMenu, getCartSummary, restoreCart, setCustomizations, setQuantity, setSwipes, withCheckoutKey } from './cart.js';
 
 const STEPS = [
@@ -27,7 +28,7 @@ function initialCart() {
   catch { return emptyCart(); }
 }
 
-export default function Menu({ email, onBack, onViewOrders, onOrderPlaced }) {
+export default function Menu({ email, onBack, onViewOrders, onOrderPlaced, reorder }) {
   const [cart, setCart] = useState(initialCart);
   const [catalog, setCatalog] = useState([]);
   const [loadState, setLoadState] = useState('loading');
@@ -47,6 +48,20 @@ export default function Menu({ email, onBack, onViewOrders, onOrderPlaced }) {
   const choiceCount = visibleItems.length + (showNoSide ? 1 : 0);
   const picked = Object.fromEntries(STEPS.map((candidate) => [candidate.id, summary.items.filter((item) => item.swipeType === candidate.type)]));
   const busiest = Math.max(summary.counts.Entry, summary.counts.Side, summary.counts.Drink);
+
+  // US-29 Order again: once today's menu has loaded, rebuild the past order from it. Each
+  // request applies once (by its key), even if the menu reloads later.
+  const appliedReorder = useRef(null);
+  useEffect(() => {
+    if (!reorder || loadState !== 'ready' || appliedReorder.current === reorder.key) return;
+    appliedReorder.current = reorder.key;
+    const result = reorderCart(reorder.order, catalog);
+    setNotice(reorderMessage(reorder.order, result, { replacedCart: summary.count > 0 }));
+    setQuery('');
+    if (!result.added.length) { setStep('entry'); return; }
+    setCart(result.cart);
+    setStep(stepAfterReorder(result));
+  }, [reorder, loadState, catalog, summary.count]);
 
   useEffect(() => {
     try {

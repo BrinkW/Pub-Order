@@ -27,9 +27,9 @@ const json = (body, status = 200) => ({ ok: status >= 200 && status < 300, statu
 // staff will (US5). Any other order id is "not found", like someone else's order.
 let server;
 function fakeBackend() {
-  server = { order: null, failReads: false };
+  server = { order: null, failReads: false, soldOut: new Set() };
   return vi.fn(async (url, options = {}) => {
-    if (url === '/api/menu') return json(catalog);
+    if (url === '/api/menu') return json(catalog.map((item) => (server.soldOut.has(item.id) ? { ...item, available: false } : item)));
     if (url === '/api/me') return json({ id: 'student-1', email: EMAIL });
     if (url === '/api/checkout/review') {
       return json({ items: catalog.map((item) => ({ ...item, quantity: 1 })), counts: { Entry: 1, Side: 1, Drink: 1 }, swipes: 1, issues: [], canSubmit: true });
@@ -273,5 +273,67 @@ describe('US4: student notifications across the app', () => {
 
     expect(await screen.findByRole('heading', { name: 'Being prepared' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Order #0A1B2C3D is being prepared' })).not.toBeInTheDocument();
+  });
+});
+
+describe('US-29: order again', () => {
+  // A finished order already saved on the server, the way My orders and the order page see it.
+  function pastOrder() {
+    server.order = {
+      id: ID, status: 'Collected', swipes: 1, createdAt: '2026-11-10T18:00:00+00:00',
+      items: catalog.map((item) => ({ id: item.id, name: item.name, swipeType: item.swipeType, quantity: 1, customization: '' })),
+    };
+  }
+
+  it('puts a past order back in the cart from My orders and places it as a new order', async () => {
+    pastOrder();
+    window.location.hash = 'orders';
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: 'Order 0A1B2C3D again' }));
+
+    expect(window.location.hash).toBe('#menu');
+    expect(await screen.findByText('Order #0A1B2C3D is back in your order. Check it and send it when you’re ready.')).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(CART_STORAGE_KEY)).items).toEqual({ burger: 1, fries: 1, tea: 1 });
+    const place = await screen.findByRole('button', { name: 'Place order' });
+    await waitFor(() => expect(place).toBeEnabled());
+    await user.click(place);
+
+    await screen.findByRole('heading', { name: 'Order received' });
+    const posted = fetch.mock.calls.filter(([url, options]) => url === '/api/orders' && options?.method === 'POST');
+    expect(posted).toHaveLength(1);
+    expect(JSON.parse(posted[0][1].body).items.map((item) => item.id).sort()).toEqual(['burger', 'fries', 'tea']);
+  });
+
+  it('leaves out a sold-out item, says so, and opens that step to pick a replacement', async () => {
+    pastOrder();
+    server.soldOut.add('fries');
+    window.location.hash = 'orders';
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: 'Order 0A1B2C3D again' }));
+
+    expect(await screen.findByText(/We left out Fries \(sold out\)\. Pick a replacement before you send it\./)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Search sides…')).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(CART_STORAGE_KEY)).items).toEqual({ burger: 1, tea: 1 });
+  });
+
+  it('offers Order this again on a finished order’s page, but not on one still in progress', async () => {
+    pastOrder();
+    window.location.hash = `order/${ID}`;
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(await screen.findByRole('button', { name: 'Order this again' }));
+
+    expect(window.location.hash).toBe('#menu');
+    expect(await screen.findByRole('button', { name: 'Place order' })).toBeInTheDocument();
+
+    server.order.status = 'Preparing';
+    window.location.hash = `order/${ID}`;
+    await screen.findByRole('heading', { name: 'Being prepared' });
+    expect(screen.queryByRole('button', { name: 'Order this again' })).not.toBeInTheDocument();
   });
 });
