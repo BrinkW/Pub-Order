@@ -8,12 +8,14 @@ from app.menu import router as menu_router
 from app.notifications import router as notifications_router
 from app.orders import access_token, fetch_role
 from app.orders import router as orders_router
+from app.security_log import log_refused_requests
 
 app = FastAPI()
 app.include_router(menu_router)
 app.include_router(orders_router)
 app.include_router(crowd_router)
 app.include_router(notifications_router)
+app.middleware("http")(log_refused_requests)
 
 app.add_middleware(
     CORSMiddleware,
