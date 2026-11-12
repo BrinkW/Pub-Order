@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -34,6 +35,8 @@ class FakeDatabase:
 
         self.select_error = None
         self.orderings = []
+        self.limits = []
+        self.lower_than = []
 
     def rpc(self, name, params):
         self.rpc_calls.append((name, params))
@@ -41,7 +44,7 @@ class FakeDatabase:
         return self
 
     def from_(self, table):
-        self.mode, self.filter = "select", None
+        self.mode, self.filter, self.cutoff, self.page = "select", None, None, None
         return self
 
     def select(self, columns):
@@ -55,6 +58,16 @@ class FakeDatabase:
         self.orderings.append((column, desc))
         return self
 
+    def lt(self, column, value):
+        self.lower_than.append((column, value))
+        self.cutoff = value
+        return self
+
+    def limit(self, size):
+        self.limits.append(size)
+        self.page = size
+        return self
+
     def execute(self):
         if self.mode == "rpc":
             if self.rpc_error is not None:
@@ -65,9 +78,15 @@ class FakeDatabase:
             return SimpleNamespace(data=self.rpc_result)
         if self.select_error is not None:
             raise self.select_error
-        if self.filter is None:
-            return SimpleNamespace(data=self.rows)
-        return SimpleNamespace(data=[row for row in self.rows if row.get(self.filter[0]) == self.filter[1]])
+        rows = self.rows
+        if self.filter is not None:
+            rows = [row for row in rows if row.get(self.filter[0]) == self.filter[1]]
+        if self.cutoff is not None:
+            cutoff = datetime.fromisoformat(self.cutoff)
+            rows = [row for row in rows if datetime.fromisoformat(row["created_at"]) < cutoff]
+        if self.page is not None:
+            rows = rows[:self.page]
+        return SimpleNamespace(data=rows)
 
 
 @pytest.fixture
@@ -255,6 +274,39 @@ def test_lists_the_students_orders_newest_first(client, database, signed_in):
     assert [order["id"] for order in response.json()] == [ORDER_ID, OLDER["id"]]
     assert database.orderings == [("created_at", True)]
     assert database.tokens == ["test-token"]
+
+
+def test_history_is_capped_at_one_page(client, database, signed_in):
+    """US2 / A04: one request never returns a student's whole history."""
+    response = client.get("/orders", headers=HEADERS)
+
+    assert response.status_code == 200
+    assert database.limits == [orders.MAX_ORDER_PAGE]
+    assert database.lower_than == []
+
+
+def test_history_pages_back_from_the_last_order_shown(client, database, signed_in):
+    """US2: "Load older orders" asks for orders placed before the oldest one on screen."""
+    database.rows = [database.rows[0], OLDER]
+
+    response = client.get(
+        "/orders", params={"limit": 20, "before": "2026-10-19T12:00:00+00:00"}, headers=HEADERS,
+    )
+
+    assert response.status_code == 200
+    assert [order["id"] for order in response.json()] == [OLDER["id"]]
+    assert database.limits == [20]
+    assert database.lower_than == [("created_at", "2026-10-19T12:00:00+00:00")]
+
+
+@pytest.mark.parametrize("params", [
+    {"limit": 0}, {"limit": orders.MAX_ORDER_PAGE + 1}, {"limit": "all"}, {"before": "yesterday"},
+])
+def test_history_rejects_bad_paging(client, database, signed_in, params):
+    response = client.get("/orders", params=params, headers=HEADERS)
+
+    assert response.status_code == 422
+    assert database.tokens == []
 
 
 def test_reads_one_of_the_students_orders(client, database, signed_in):

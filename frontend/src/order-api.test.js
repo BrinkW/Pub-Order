@@ -75,6 +75,16 @@ describe('loadOrder', () => {
 });
 
 describe('loadOrders', () => {
+  it('asks for one page of history, then the page before the oldest order shown (US2)', async () => {
+    fetch.mockResolvedValueOnce(response([order]));
+    await loadOrders(undefined, { limit: 20 });
+    expect(fetch.mock.calls[0][0]).toBe('/api/orders?limit=20');
+
+    fetch.mockResolvedValueOnce(response([]));
+    await expect(loadOrders(undefined, { limit: 20, before: order.createdAt })).resolves.toEqual({ orders: [] });
+    expect(fetch.mock.calls[1][0]).toBe('/api/orders?limit=20&before=2026-10-19T12%3A00%3A00%2B00%3A00');
+  });
+
   it('lists the student’s orders', async () => {
     fetch.mockResolvedValueOnce(response([order]));
     await expect(loadOrders()).resolves.toEqual({ orders: [order] });
