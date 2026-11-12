@@ -51,6 +51,7 @@ jobs:
           psql "$PUB_ORDER_TEST_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/menu_items.sql
           psql "$PUB_ORDER_TEST_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/orders.sql
           psql "$PUB_ORDER_TEST_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/roles.sql
+          psql "$PUB_ORDER_TEST_DB_URL" -v ON_ERROR_STOP=1 -f supabase/tests/realtime.sql
       - name: Coverage report (fails below 70%)
         run: coverage report --show-missing --fail-under=70
 

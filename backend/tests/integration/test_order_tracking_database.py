@@ -9,6 +9,7 @@ local database.
 
 from __future__ import annotations
 
+from datetime import datetime
 from uuid import uuid4
 
 import pytest
@@ -149,3 +150,44 @@ def test_cancel_is_refused_once_the_kitchen_starts(client, admin, student, order
 
     assert response.status_code == 409
     assert stored_status(admin, order["id"]) == "Preparing"
+
+
+def test_history_lists_only_the_owners_orders(client, admin, student, other_student, order):
+    """US2: another student's history never includes this order, and the owner's does."""
+    mine = client.get("/orders", headers=headers(student[0])).json()
+    theirs = client.get("/orders", headers=headers(other_student[0])).json()
+
+    assert order["id"] in [row["id"] for row in mine]
+    assert order["id"] not in [row["id"] for row in theirs]
+
+
+def test_history_pages_back_in_time(client, student, order):
+    """US2: the next page starts strictly before the oldest order on the current page."""
+    first = client.get("/orders", params={"limit": 1}, headers=headers(student[0])).json()
+    assert [row["id"] for row in first] == [order["id"]]
+
+    older = client.get(
+        "/orders", params={"limit": 100, "before": order["createdAt"], "beforeId": order["id"]},
+        headers=headers(student[0]),
+    ).json()
+
+    newest_shown = datetime.fromisoformat(order["createdAt"])
+    assert order["id"] not in [row["id"] for row in older]
+    assert all(datetime.fromisoformat(row["createdAt"]) <= newest_shown for row in older)
+
+
+def test_history_paging_keeps_orders_placed_at_the_same_instant(client, admin, student, order):
+    """US2 review: two orders with the same created_at both appear, one page each, through
+    the real PostgREST filter (this also checks the quoted timestamp syntax)."""
+    second = place(client, student[0]).json()
+    try:
+        admin.table("orders").update({"created_at": order["createdAt"]}).eq("id", second["id"]).execute()
+        pair = sorted([order["id"], second["id"]], reverse=True)
+
+        first = client.get("/orders", params={"limit": 1}, headers=headers(student[0])).json()
+        cursor = {"before": first[0]["createdAt"], "beforeId": first[0]["id"]}
+        next_page = client.get("/orders", params={"limit": 1, **cursor}, headers=headers(student[0])).json()
+
+        assert [first[0]["id"], next_page[0]["id"]] == pair
+    finally:
+        admin.table("orders").delete().eq("id", second["id"]).execute()

@@ -65,6 +65,11 @@ export async function placeOrder(cart, catalog) {
     const body = await response.json().catch(() => ({}));
     return { issues: body.detail?.issues ?? [], message: body.detail?.message || 'Your meal needs review before ordering.' };
   }
+  if (response.status === 429) {
+    // SEC-03: too many orders in progress or placed recently. The server says which.
+    const body = await response.json().catch(() => ({}));
+    throw new Error(typeof body.detail === 'string' ? body.detail : 'You have too many orders right now. Please try again later.');
+  }
   if (!response.ok) throw new Error('Could not place your order. Your cart is still here; please try again.');
   return { order: await response.json() };
 }

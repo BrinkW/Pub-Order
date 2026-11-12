@@ -2,7 +2,7 @@
 // Menu, Checkout, OrderPage, MyOrders, cart rules, hash routing and browser storage working
 // together. Only the outside services are faked: Supabase auth and the FastAPI endpoints
 // (/api/menu, /api/checkout/review, /api/orders, /api/orders/{id}).
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App, { pageFromHash } from './App.jsx';
@@ -42,7 +42,8 @@ function fakeBackend() {
       return json(server.order, 201);
     }
     if (server.failReads) return json({ detail: 'Could not load this order.' }, 503);
-    if (url === '/api/orders') return json(server.order ? [server.order] : []);
+    // The history page (US2) and notifications (US4) ask for a page: /api/orders?limit=20.
+    if (url.split('?')[0] === '/api/orders') return json(server.order ? [server.order] : []);
     if (url === `/api/orders/${ID}` && server.order) return json(server.order);
     if (url.startsWith('/api/orders/')) return json({ detail: 'Order not found.' }, 404);
     throw new Error(`Unexpected request to ${url}`);
@@ -226,5 +227,51 @@ describe('pageFromHash', () => {
     ['#somewhere', { name: 'login' }],
   ])('maps %j to the right page', (hash, page) => {
     expect(pageFromHash(hash)).toEqual(page);
+  });
+});
+
+describe('US4: student notifications across the app', () => {
+  // The same fake Supabase, plus a user id and a Realtime channel the test can push events into.
+  let channel;
+  beforeEach(() => {
+    channel = { on: vi.fn(() => channel), subscribe: vi.fn((report) => { report('SUBSCRIBED'); return channel; }) };
+    const session = { access_token: 'test-token', user: { id: 'student-1', email: EMAIL } };
+    getSupabase.mockReturnValue({
+      auth: {
+        getSession: vi.fn().mockResolvedValue({ data: { session } }),
+        onAuthStateChange: vi.fn().mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } }),
+      },
+      channel: vi.fn(() => channel),
+      removeChannel: vi.fn(),
+    });
+  });
+
+  const pushUpdate = (row) => act(() => channel.on.mock.calls[0][2]({ new: row }));
+
+  it('shows a Ready notice on another page and opens the order from it', async () => {
+    const { user } = await placeOrder();
+    await user.click(screen.getByRole('button', { name: 'Order something else' }));
+    await vi.waitFor(() => expect(channel.on).toHaveBeenCalled());
+
+    server.order.status = 'Ready';
+    pushUpdate({ id: ID, status: 'Ready', user_id: 'student-1' });
+
+    expect(await screen.findByRole('heading', { name: 'Order #0A1B2C3D is ready for pickup' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'View order' }));
+
+    expect(window.location.hash).toBe(`#order/${ID}`);
+    expect(await screen.findByRole('heading', { level: 2, name: 'Ready for pickup' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Order #0A1B2C3D is ready for pickup' })).not.toBeInTheDocument();
+  });
+
+  it('updates the open order page without a corner notice or a manual refresh', async () => {
+    await placeOrder();
+    await vi.waitFor(() => expect(channel.on).toHaveBeenCalled());
+
+    server.order.status = 'Preparing';
+    pushUpdate({ id: ID, status: 'Preparing', user_id: 'student-1' });
+
+    expect(await screen.findByRole('heading', { name: 'Being prepared' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Order #0A1B2C3D is being prepared' })).not.toBeInTheDocument();
   });
 });

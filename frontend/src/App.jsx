@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Kitchen from './Kitchen.jsx';
 import Login from './Login.jsx';
 import Menu from './Menu.jsx';
 import MyOrders from './MyOrders.jsx';
+import OrderNotices from './OrderNotices.jsx';
 import OrderPage from './OrderPage.jsx';
 import { getSupabase } from './supabase.js';
+import { useOrderNotifications } from './useOrderNotifications.js';
 import './menu.css';
 import './orders.css';
 
@@ -25,7 +27,11 @@ const hashFor = (page) => (page.name === 'order' ? `order/${encodeURIComponent(p
 export default function App() {
   const [page, setPage] = useState(() => pageFromHash(window.location.hash));
   const [email, setEmail] = useState('');
+  const [userId, setUserId] = useState('');
   const [role, setRole] = useState('');
+  // US4: order updates shown in the corner, and the latest one, so an open order page re-reads.
+  const [notices, setNotices] = useState([]);
+  const [liveUpdate, setLiveUpdate] = useState(null);
   const [accountChecked, setAccountChecked] = useState(false);
   // The order Checkout just saved, shown at once while the page re-reads it from the server.
   const [placedOrder, setPlacedOrder] = useState(null);
@@ -47,10 +53,10 @@ export default function App() {
     let active = true;
     async function apply(session) {
       if (!session) {
-        if (active) { setEmail(''); setRole(''); setAccountChecked(true); }
+        if (active) { setEmail(''); setUserId(''); setRole(''); setNotices([]); setAccountChecked(true); }
         return;
       }
-      if (active) setEmail(session.user?.email || '');
+      if (active) { setEmail(session.user?.email || ''); setUserId(session.user?.id || ''); }
       try {
         const response = await fetch('/api/me', { headers: { Authorization: `Bearer ${session.access_token}` } });
         const profile = response.ok ? await response.json() : {};
@@ -85,6 +91,23 @@ export default function App() {
     navigate('kitchen');
   }, [role, page.name, navigate]);
 
+  const pageRef = useRef(page);
+  useEffect(() => { pageRef.current = page; }, [page]);
+
+  const notifications = useOrderNotifications({
+    userId,
+    enabled: role === 'student',
+    onNotice: (notice) => {
+      setLiveUpdate({ orderId: notice.orderId, status: notice.status });
+      // The order page already shows its own status change, so no corner notice for that order.
+      const current = pageRef.current;
+      if (current.name === 'order' && current.orderId === notice.orderId) return;
+      // A newer notice for an order replaces the older one; at most three stay on screen.
+      setNotices((shown) => [notice, ...shown.filter((item) => item.orderId !== notice.orderId)].slice(0, 3));
+    },
+    onOpenOrder: (orderId) => openOrder(orderId),
+  });
+
   function signInThenReturn() {
     setAfterSignIn(page);
     navigate('login');
@@ -92,6 +115,7 @@ export default function App() {
 
   const openOrder = (orderId) => {
     setPlacedOrder(null);
+    setNotices((shown) => shown.filter((item) => item.orderId !== orderId));
     navigate({ name: 'order', orderId });
   };
 
@@ -101,7 +125,7 @@ export default function App() {
       email={email}
       onBack={() => navigate('login')}
       onViewOrders={() => navigate('orders')}
-      onOrderPlaced={(order) => { setPlacedOrder(order); navigate({ name: 'order', orderId: order.id }); }}
+      onOrderPlaced={(order) => { setPlacedOrder(order); notifications.track(order); navigate({ name: 'order', orderId: order.id }); }}
     /></div>
     {page.name === 'order' && <OrderPage
       key={page.orderId}
@@ -109,6 +133,7 @@ export default function App() {
       initialOrder={placedOrder}
       justPlaced={placedOrder?.id === page.orderId}
       email={email}
+      liveUpdate={liveUpdate}
       onBackToMenu={() => navigate('menu')}
       onViewOrders={() => navigate('orders')}
       onSignIn={signInThenReturn}
@@ -124,6 +149,7 @@ export default function App() {
       onSignOut={async () => {
         await getSupabase()?.auth.signOut();
         setEmail('');
+        setUserId('');
         setRole('');
         navigate('login');
       }}
@@ -134,5 +160,10 @@ export default function App() {
       navigate(account.role === 'kitchen' ? 'kitchen' : (afterSignIn ?? 'menu'));
       setAfterSignIn(null);
     }} />}
+    {role === 'student' && page.name !== 'login' && <OrderNotices
+      notices={notices}
+      onOpen={(notice) => openOrder(notice.orderId)}
+      onDismiss={(notice) => setNotices((shown) => shown.filter((item) => item.id !== notice.id))}
+    />}
   </>;
 }

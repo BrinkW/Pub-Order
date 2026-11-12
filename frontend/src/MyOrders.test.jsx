@@ -1,11 +1,12 @@
-// Component tests for the My orders list (US6). The API module is faked.
-import { render, screen, within } from '@testing-library/react';
+// Component tests for the My orders list (US6) and order history (US2). The API module is
+// faked, with a page size of 2 so paging is easy to see.
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import MyOrders from './MyOrders.jsx';
 import { loadOrders } from './order-api.js';
 
-vi.mock('./order-api.js', () => ({ loadOrders: vi.fn() }));
+vi.mock('./order-api.js', () => ({ HISTORY_PAGE_SIZE: 2, loadOrders: vi.fn() }));
 
 const orderWith = (n, status) => ({
   id: `0a1b2c3d-0000-4000-8000-00000000000${n}`, status, swipes: 1, createdAt: '2026-10-19T12:00:00+00:00',
@@ -82,5 +83,59 @@ describe('My orders', () => {
     await screen.findByRole('region', { name: 'In progress' });
     await userEvent.click(screen.getByRole('button', { name: 'Refresh list' }));
     expect(loadOrders).toHaveBeenCalledTimes(3);
+  });
+
+  it('shows when each order was placed and its total (US2)', async () => {
+    loadOrders.mockResolvedValueOnce({ orders: [{ ...orderWith(1, 'Collected'), swipes: 2 }] });
+    renderList();
+
+    const row = (await screen.findByRole('region', { name: 'Past orders' })).querySelector('li');
+    expect(within(row).getByText(/Total: 2 meal swipes/)).toBeInTheDocument();
+    expect(row.querySelector('time')).toHaveAttribute('dateTime', '2026-10-19T12:00:00+00:00');
+    expect(within(row).getByText(/^Placed /)).toBeInTheDocument();
+    expect(within(row).getByText('Picked up')).toBeInTheDocument();
+  });
+
+  it('asks for one page and offers older orders only when the page was full (US2)', async () => {
+    loadOrders.mockResolvedValueOnce({ orders: [orderWith(1, 'Collected')] });
+    renderList();
+
+    await screen.findByRole('region', { name: 'Past orders' });
+    expect(loadOrders).toHaveBeenCalledWith(expect.anything(), { limit: 2 });
+    expect(screen.queryByRole('button', { name: 'Load older orders' })).not.toBeInTheDocument();
+  });
+
+  it('loads the page before the oldest order shown and adds it below (US2)', async () => {
+    const older = { ...orderWith(4, 'Collected'), createdAt: '2026-10-01T12:00:00+00:00' };
+    loadOrders
+      .mockResolvedValueOnce({ orders: [orderWith(1, 'Ready'), { ...orderWith(3, 'Collected'), createdAt: '2026-10-05T12:00:00+00:00' }] })
+      .mockResolvedValueOnce({ orders: [older] });
+    renderList();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Load older orders' }));
+
+    expect(loadOrders).toHaveBeenLastCalledWith(expect.anything(), {
+      limit: 2, before: '2026-10-05T12:00:00+00:00', beforeId: '0a1b2c3d-0000-4000-8000-000000000003',
+    });
+    const past = screen.getByRole('region', { name: 'Past orders' });
+    await waitFor(() => expect(within(past).getAllByRole('listitem')).toHaveLength(2));
+    // Fewer than a full page came back, so that was the oldest page.
+    expect(screen.queryByRole('button', { name: 'Load older orders' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the orders it has when an older page fails, and lets the student retry (US2)', async () => {
+    loadOrders
+      .mockResolvedValueOnce({ orders: [orderWith(1, 'Collected'), orderWith(2, 'Collected')] })
+      .mockRejectedValueOnce(new Error('Could not load your orders. Please try again.'))
+      .mockResolvedValueOnce({ orders: [] });
+    renderList();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Load older orders' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not load your orders');
+    expect(within(screen.getByRole('region', { name: 'Past orders' })).getAllByRole('listitem')).toHaveLength(2);
+    await userEvent.click(screen.getByRole('button', { name: 'Load older orders' }));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Load older orders' })).not.toBeInTheDocument());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 });
