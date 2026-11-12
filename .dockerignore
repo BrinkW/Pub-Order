@@ -1,0 +1,16 @@
+# Send only what the image needs. Everything else, including .env, stays out.
+*
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/index.html
+!frontend/vite.config.js
+!frontend/public
+!frontend/src
+!backend/requirements.txt
+!backend/app
+!backend/serve.py
+
+**/__pycache__
+**/*.test.js
+**/*.test.jsx
+frontend/src/test

@@ -1,20 +1,63 @@
 -- Run after the migrations, in one transaction that is rolled back.
 begin;
 
-insert into auth.users (id, email) values
-  ('00000000-0000-4000-8000-00000000000a', 'order-test-a@example.com'),
-  ('00000000-0000-4000-8000-00000000000b', 'order-test-b@example.com'),
-  ('00000000-0000-4000-8000-00000000000c', 'kitchen@puborder.test');
+-- SEC-02: only @vanderbilt.edu addresses can create an account, or be switched to later.
+-- That also refuses the old shared kitchen email outright.
+do $$
+begin
+  begin
+    insert into auth.users (id, email) values ('00000000-0000-4000-8000-0000000000e1', 'someone@gmail.com');
+    raise exception 'SEC-02: a non-Vanderbilt sign-up was accepted';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into auth.users (id, email) values ('00000000-0000-4000-8000-0000000000e2', 'kitchen@puborder.test');
+    raise exception 'SEC-02: kitchen@puborder.test was allowed to register';
+  exception when check_violation then null;
+  end;
+  begin
+    insert into auth.users (id, email) values ('00000000-0000-4000-8000-0000000000e3', 'student@vanderbilt.edu.evil.com');
+    raise exception 'SEC-02: a look-alike domain was accepted';
+  exception when check_violation then null;
+  end;
+end $$;
 
+insert into auth.users (id, email) values
+  ('00000000-0000-4000-8000-00000000000a', 'order-test-a@vanderbilt.edu'),
+  ('00000000-0000-4000-8000-00000000000b', 'Order-Test-B@Vanderbilt.edu'),
+  ('00000000-0000-4000-8000-00000000000c', 'kitchen-test@vanderbilt.edu');
+
+do $$
+begin
+  begin
+    update auth.users set email = 'order-test-a@gmail.com' where id = '00000000-0000-4000-8000-00000000000a';
+    raise exception 'SEC-02: an account was moved to a non-Vanderbilt address';
+  exception when check_violation then null;
+  end;
+end $$;
+
+-- SEC-01: every sign-up is a student, whatever its email.
 do $$
 begin
   if (select role from public.profiles where user_id = '00000000-0000-4000-8000-00000000000a') <> 'student' then
     raise exception 'A normal sign-up must be a student';
   end if;
-  if (select role from public.profiles where user_id = '00000000-0000-4000-8000-00000000000c') <> 'kitchen' then
-    raise exception 'The kitchen test account must be kitchen';
+  if (select role from public.profiles where user_id = '00000000-0000-4000-8000-00000000000c') <> 'student' then
+    raise exception 'SEC-01: a new account must never start as kitchen';
   end if;
 end $$;
+
+-- Kitchen access is granted only by a deliberate database change, as staff setup does it.
+update public.profiles set role = 'kitchen' where user_id = '00000000-0000-4000-8000-00000000000c';
+
+set local role anon;
+do $$
+begin
+  if (select level from public.crowd_status where id = true) <> 'not_reported' then
+    raise exception 'The initial crowd status must be public and not reported';
+  end if;
+end $$;
+reset role;
 
 set local role authenticated;
 select set_config('request.jwt.claims', '{"sub": "00000000-0000-4000-8000-00000000000a", "role": "authenticated"}', true);
@@ -34,6 +77,11 @@ begin
   if (select status from public.orders where id = v_order) <> 'Received' then
     raise exception 'A student status change was stored';
   end if;
+  begin
+    perform public.set_crowd_level('busy');
+    raise exception 'A student was allowed to change the crowd level';
+  exception when insufficient_privilege then null;
+  end;
 end $$;
 
 select set_config('request.jwt.claims', '{"sub": "00000000-0000-4000-8000-00000000000c", "role": "authenticated"}', true);
@@ -64,6 +112,13 @@ begin
     raise exception 'Kitchen sold-out change was not stored';
   end if;
   perform public.set_item_availability('pub-burger', true);
+  perform public.set_crowd_level('busy');
+  if (select level from public.crowd_status where id = true) <> 'busy' then
+    raise exception 'Kitchen crowd change was not stored';
+  end if;
+  if (select updated_at from public.crowd_status where id = true) is null then
+    raise exception 'Crowd changes must record an update time';
+  end if;
 end $$;
 
 select set_config('request.jwt.claims', '{"sub": "00000000-0000-4000-8000-00000000000b", "role": "authenticated"}', true);
@@ -77,6 +132,48 @@ begin
     raise exception 'A student was allowed to mark an item sold out';
   exception when insufficient_privilege then null;
   end;
+end $$;
+
+-- US23: a student cancels a new order; the kitchen can neither reopen nor cancel it.
+select set_config('request.jwt.claims', '{"sub": "00000000-0000-4000-8000-00000000000a", "role": "authenticated"}', true);
+do $$
+begin
+  perform public.cancel_order(public.place_order(
+    '00000000-0000-4000-8000-000000000011', 1,
+    '[{"id": "pub-burger", "quantity": 1}, {"id": "straight-cut-fries", "quantity": 1}, {"id": "sweet-tea", "quantity": 1}]'
+  ));
+end $$;
+
+select set_config('request.jwt.claims', '{"sub": "00000000-0000-4000-8000-00000000000c", "role": "authenticated"}', true);
+do $$
+declare
+  v_order uuid := (select id from public.orders where status = 'Cancelled');
+begin
+  begin
+    perform public.set_order_status(v_order, 'Preparing');
+    raise exception 'Kitchen reopened a cancelled order';
+  exception when object_not_in_prerequisite_state then null;
+  end;
+  begin
+    perform public.cancel_order((select id from public.orders where status = 'Ready'));
+    raise exception 'Kitchen cancelled a student''s order';
+  exception when no_data_found then null;
+  end;
+end $$;
+
+-- Only signed-in users may run cancel_order. Calling it as anon fails with 42501 either way
+-- (anon has no auth.uid()), so check the grant itself.
+do $$
+begin
+  if has_function_privilege('anon', 'public.cancel_order(uuid)', 'execute') then
+    raise exception 'anon can execute cancel_order';
+  end if;
+  if has_function_privilege('public', 'public.cancel_order(uuid)', 'execute') then
+    raise exception 'public can execute cancel_order';
+  end if;
+  if not has_function_privilege('authenticated', 'public.cancel_order(uuid)', 'execute') then
+    raise exception 'authenticated cannot execute cancel_order';
+  end if;
 end $$;
 
 rollback;

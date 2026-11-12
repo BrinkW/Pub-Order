@@ -83,6 +83,27 @@ describe('Login form validation', () => {
     expect(screen.getByText('Passwords do not match.')).toBeInTheDocument();
     expect(auth.signUp).not.toHaveBeenCalled();
   });
+
+  it('only lets a Vanderbilt email sign up (SEC-02)', async () => {
+    const user = setup();
+
+    await fillSignUp(user, 'someone@gmail.com');
+    await user.click(submitButton('Create account'));
+
+    expect(screen.getByText('Use your @vanderbilt.edu email address.')).toBeInTheDocument();
+    expect(auth.signUp).not.toHaveBeenCalled();
+  });
+
+  it('still lets an existing account with another email sign in', async () => {
+    auth.signInWithPassword.mockResolvedValue({ data: { session: null }, error: { code: 'invalid_credentials' } });
+    const user = setup();
+
+    await fillSignIn(user, 'staff@example.com');
+    await user.click(submitButton());
+
+    expect(screen.queryByText('Use your @vanderbilt.edu email address.')).not.toBeInTheDocument();
+    expect(auth.signInWithPassword).toHaveBeenCalled();
+  });
 });
 
 describe('Login form controls', () => {
@@ -248,6 +269,7 @@ describe('Signing up', () => {
     expect(auth.signUp).toHaveBeenCalledWith({
       email: 'student@vanderbilt.edu',
       password: 'secret123',
+      options: { emailRedirectTo: window.location.origin },
     });
   });
 
@@ -258,7 +280,7 @@ describe('Signing up', () => {
     await fillSignUp(user);
     await user.click(submitButton('Create account'));
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Account created. Sign in to continue.');
+    expect(await screen.findByRole('status')).toHaveTextContent('Account created. Check your email for a confirmation link, then sign in.');
     expect(screen.getByRole('tab', { name: 'Sign in' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByLabelText('Password')).toHaveValue('');
     expect(screen.getByLabelText('Email')).toHaveValue('student@vanderbilt.edu');

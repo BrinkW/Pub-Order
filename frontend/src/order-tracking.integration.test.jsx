@@ -9,6 +9,7 @@ import App, { pageFromHash } from './App.jsx';
 import { CART_STORAGE_KEY } from './cart.js';
 import { getSupabase } from './supabase.js';
 
+vi.mock('./CrowdMeter.jsx', () => ({ CrowdMeter: () => null, CrowdMeterControls: () => null }));
 vi.mock('./supabase.js', () => ({ getSupabase: vi.fn() }));
 
 const EMAIL = 'student@vanderbilt.edu';

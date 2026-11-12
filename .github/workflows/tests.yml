@@ -142,7 +142,11 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - name: Install frontend dependencies (package-lock.json)
         run: npm ci
-      - run: npx playwright install --with-deps chromium
+      # GitHub's hosted Ubuntu image already includes Chromium's shared-library
+      # dependencies. Avoid an apt refresh here: a transient Ubuntu mirror DNS
+      # failure would otherwise fail the suite before any project test runs.
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
       - uses: supabase/setup-cli@v3
         with:
           version: 2.121.0
@@ -214,6 +218,15 @@ jobs:
           curl -fs http://127.0.0.1:8080/ | grep -q "<title>Pub-Order</title>"
           curl -fs http://127.0.0.1:8080/config.js | grep -q "smoke-public-key"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/api/me)" = "401"
+      - name: Smoke-test the Docker image (what Render deploys)
+        run: |
+          docker build -t pub-order:ci .
+          docker run -d --name pub-order-smoke -p 8090:10000 -e PORT=10000 \
+            -e SUPABASE_URL=https://smoke.supabase.co -e SUPABASE_KEY=smoke-public-key pub-order:ci
+          for i in $(seq 1 30); do curl -fs -o /dev/null http://127.0.0.1:8090/ && break; sleep 1; done
+          curl -fs http://127.0.0.1:8090/ | grep -q "<title>Pub-Order</title>"
+          curl -fs http://127.0.0.1:8090/config.js | grep -q "smoke-public-key"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8090/api/me)" = "401"
       - uses: actions/upload-artifact@v7
         with:
           name: ${{ env.ARTIFACT_NAME }}

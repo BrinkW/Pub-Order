@@ -2,7 +2,7 @@
 // The backend returns 404 for an order that is missing or belongs to someone else, so the
 // page cannot tell the two apart and never reveals another student's order.
 import { getSupabase } from './supabase.js';
-import { isOrder, isOrderId } from './order-status.js';
+import { CANCELLED, isOrder, isOrderId } from './order-status.js';
 
 const LOAD_FAILED = 'Could not load your order. Please try again.';
 const LIST_FAILED = 'Could not load your orders. Please try again.';
@@ -44,6 +44,31 @@ export async function loadOrders(signal) {
   return { orders };
 }
 
+const CANCEL_FAILED = 'Could not cancel this order. Please try again.';
+
+// US23. Returns { order }, { signInRequired }, { notFound } or { tooLate } (the kitchen has
+// already started it). Throws when the request fails.
+export async function cancelOrder(orderId) {
+  const token = await accessToken();
+  if (!token) return { signInRequired: true };
+  const response = await fetch(`/api/orders/${orderId}/cancel`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (response.status === 401) return { signInRequired: true };
+  if (response.status === 404) return { notFound: true };
+  if (response.status === 409) {
+    const body = await response.json().catch(() => null);
+    return { tooLate: true, message: typeof body?.detail === 'string' ? body.detail : undefined };
+  }
+  if (!response.ok) throw new Error(CANCEL_FAILED);
+  const order = await response.json().catch(() => null);
+  // If the server couldn't read the order back after cancelling, it confirms with just the id and status.
+  const confirmed = order?.id === orderId && order?.status === CANCELLED;
+  if (!(isOrder(order) || confirmed) || order.id !== orderId) throw new Error(CANCEL_FAILED);
+  return { order };
+}
+
 const UPDATE_FAILED = 'Could not update this order. Please try again.';
 
 // Kitchen staff only. Returns { order }, { signInRequired }, { forbidden } or { notFound }.
@@ -62,4 +87,24 @@ export async function updateOrderStatus(orderId, status) {
   const order = await response.json().catch(() => null);
   if (!isOrder(order) || order.id !== orderId) throw new Error(UPDATE_FAILED);
   return { order };
+}
+
+const NOTIFY_FAILED = 'Could not email this student. Please try again.';
+
+// Kitchen staff only. Sends the current order status to the email captured at checkout.
+export async function emailStudent(orderId) {
+  const token = await accessToken();
+  if (!token) return { signInRequired: true };
+  const response = await fetch(`/api/orders/${orderId}/notification`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (response.status === 401) return { signInRequired: true };
+  if (response.status === 403) return { forbidden: true };
+  if (response.status === 404) return { notFound: true };
+  if (response.status === 409) return { noEmail: true };
+  if (!response.ok) throw new Error(NOTIFY_FAILED);
+  const result = await response.json().catch(() => null);
+  if (!result?.delivered) throw new Error(NOTIFY_FAILED);
+  return { delivered: true };
 }

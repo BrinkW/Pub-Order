@@ -77,6 +77,7 @@ def test_menu_reads_seeded_rows_from_database(client, admin):
     assert response.json()[0] == {
         "id": "beyond-burger-patty", "name": "Beyond Burger Patty", "category": "Grill Main",
         "swipeType": "Entry", "description": "", "portion": "1 patty", "label": "Vegan",
+        "markers": ["Vegan"],
         "image": "beyond-burger-patty.jpg", "available": True,
     }
 

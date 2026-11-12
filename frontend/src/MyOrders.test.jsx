@@ -29,11 +29,21 @@ describe('My orders', () => {
     renderList();
 
     const current = await screen.findByRole('region', { name: 'In progress' });
-    const past = screen.getByRole('region', { name: 'Picked up' });
+    const past = screen.getByRole('region', { name: 'Past orders' });
     expect(within(current).getAllByRole('listitem').map((row) => within(row).getByText(/^Order #/).textContent))
       .toEqual(['Order #0A1B2C3D', 'Order #0A1B2C3D']);
     expect(within(current).getByText('Ready for pickup')).toBeInTheDocument();
     expect(within(past).getAllByRole('listitem')).toHaveLength(1);
+  });
+
+  it('never files a cancelled order under "Picked up"', async () => {
+    loadOrders.mockResolvedValue({ orders: [orderWith(1, 'Received'), orderWith(2, 'Cancelled')] });
+    renderList();
+
+    const past = await screen.findByRole('region', { name: 'Past orders' });
+
+    expect(within(past).getByText('Cancelled')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Picked up' })).not.toBeInTheDocument();
   });
 
   it('opens an order from the list', async () => {

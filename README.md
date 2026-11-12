@@ -10,11 +10,16 @@ The goal of the project is to allow students to view available menu items, place
 
 - Student login and authentication
 - View current menu items
+- See Pub dietary-preference and allergen markers on each menu item
+- See the latest crowd level reported by Pub staff
 - Add items to a cart
 - Place food orders
 - View order status
 - Estimated wait times
 - Simple interface designed for Vanderbilt students
+- Staff controls for Low, Moderate, or Busy crowd levels
+
+Menu markers were verified against Vanderbilt NetNutrition for The Pub at Overcup Oak on November 11, 2026. Dining data can change; students with dietary restrictions should confirm current information with Campus Dining staff.
 
 ## Tech Stack
 
@@ -45,7 +50,9 @@ First, copy `.env.example` to `.env` in the repo root and fill in the Supabase U
 
 Before using the app, apply the migrations in `supabase/migrations/` once, in filename order, to the intended Supabase project: `202610120001_menu_items.sql` (the menu) and then `202610180001_orders.sql` (orders). See [Hamayun’s US1/US2 walkthrough](docs/hamayun-us1-us2.md) for setup, the meal-swipe rules, API contract, tests, and the US3 handoff.
 
-**Orders API (US3).** Signed-in students place orders with `POST /api/orders` (the checkout review body plus an `idempotencyKey`), and read their own orders with `GET /api/orders` and `GET /api/orders/{id}`. Orders are saved only through the `place_order` database function, which re-checks the meal and stores the order and its items together; retrying with the same key returns the same order. New orders start as `Received`; the status column also allows `Preparing`, `Ready` and `Collected` for US5 and US6.
+Kitchen staff can email a student the current status of an order. Apply the order-email migration, then set `RESEND_API_KEY` and `NOTIFICATION_FROM_EMAIL` in the backend environment. The sender must be verified by Resend; the API key remains server-side and must never be committed.
+
+**Orders API (US3).** Signed-in students place orders with `POST /api/orders` (the checkout review body plus an `idempotencyKey`), and read their own orders with `GET /api/orders` and `GET /api/orders/{id}`. Orders are saved only through the `place_order` database function, which re-checks the meal and stores the order and its items together; retrying with the same key returns the same order. New orders start as `Received`; the status column also allows `Preparing`, `Ready` and `Collected` for US5 and US6. A student can cancel their own order with `POST /api/orders/{id}/cancel` while it is still `Received` (US23); apply `202611010001_cancel_order.sql` first.
 
 Frontend (Node.js 22.12+):
 
@@ -110,13 +117,32 @@ npm run test:e2e    # starts the dev server itself (and the backend when a test 
 - **backend** and **frontend:** install → lint → type check (backend only) → unit tests → integration tests → coverage report, stopping at the first failure. The backend job also checks the menu migration and its permissions.
 - **security:** in parallel with the test jobs, scans for secrets in the whole git history (gitleaks), runs static analysis (Bandit for Python, Semgrep for Python and JavaScript) and audits dependencies (`pip-audit`, `npm audit --audit-level=high`). Every scan runs even if an earlier one fails, and any High finding fails the check. Scanner versions are pinned in `backend/requirements-security.txt`; known false positives are listed with reasons in `.gitleaksignore`. Results and triage: [docs/security/scans/](docs/security/scans/README.md).
 - **e2e:** browser tests against the real stack after both pass.
-- **deliver:** after the test jobs and the security job pass, on every push to `main`, packages a versioned, runnable build (`pub-order-0.3.<run>-<commit>.zip`, run with `uvicorn serve:app`) as a workflow artifact. Pushing a `sprint3` tag also publishes it as a GitHub Release.
+- **deliver:** after the test jobs and the security job pass, on every push to `main`, packages a versioned, runnable build (`pub-order-0.3.<run>-<commit>.zip`, run with `uvicorn serve:app`) as a workflow artifact, and smoke-tests the Docker image used for staging (see [Deploy](#deploy-staging)). Pushing a `sprint3` tag also publishes it as a GitHub Release.
 
 Packaged builds read the Supabase URL and public anon/publishable key from the root `.env` at server startup and expose those public values through `/config.js`. No GitHub build secrets or frontend rebuild are needed. Never use a service-role key as `SUPABASE_KEY`. Apply the included `migrations/` SQL files in filename order to the configured project before use.
 
 The frontend job also checks that the production build succeeds. See [docs/testing.md](docs/testing.md) for a list of every test and what it checks.
 
 For trying the API by hand, use the Swagger UI at `/docs` on the running backend.
+
+## Deploy (staging)
+
+The staging site runs on [Render](https://render.com) from the root [Dockerfile](Dockerfile), which builds the frontend and serves it with the API from one process (`backend/serve.py`), over HTTPS. [render.yaml](render.yaml) tells Render to deploy `main` only after that commit's GitHub checks pass, so nothing is deployed by hand and a red pipeline blocks the deploy. The free instance sleeps after 15 minutes idle, so the first visit after a break takes about a minute.
+
+To run the same build locally (Docker needed), with the root `.env` filled in:
+
+```sh
+docker compose up --build    # http://localhost:8000
+```
+
+One-time setup:
+
+1. In Render, choose **New → Blueprint**, pick this repository, and enter `SUPABASE_URL` and `SUPABASE_KEY` when asked. Use the public anon/publishable key, never the service-role key. For the kitchen's **Email student** button, also enter `RESEND_API_KEY` and `NOTIFICATION_FROM_EMAIL`; leave them blank to run without email. Render only asks for these when the Blueprint is created; change them later under the service's **Environment** tab.
+2. In the hosted Supabase project, under **Authentication → URL Configuration**, set **Site URL** to the Render URL and add it to **Redirect URLs** (keep `http://localhost:5173` for development). Otherwise sign-up emails link to localhost. Under **Authentication → Sign In / Providers → Email**, turn on **Confirm email**, so a new account must prove it owns its `@vanderbilt.edu` address (SEC-02). Only `@vanderbilt.edu` addresses can sign up; the database refuses others. Supabase's built-in email sender only reaches your Supabase team's addresses, a few per hour; to reach every student, set up custom SMTP (for example Resend with a verified domain).
+3. Make sure every file in `supabase/migrations/` has been applied to the hosted project, in filename order.
+4. To use the kitchen view, set an account's `role` to `kitchen` in the `profiles` table (table editor, or `update public.profiles set role = 'kitchen' where user_id = (select id from auth.users where email = '<staff email>');` in the SQL editor). This is the only way to get kitchen access: every sign-up is a student, whatever its email (SEC-01).
+
+The Supabase keys live only in Render's dashboard. GitHub Actions never sees them, because CI tests against a throwaway local Supabase.
 
 ## Team
 

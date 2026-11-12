@@ -19,7 +19,7 @@ Tests marked "×N" run once per input listed.
 
 **Integration tests never touch the team's hosted Supabase.** CI starts a throwaway local Supabase with [start-local-supabase.sh](../.github/scripts/start-local-supabase.sh): Postgres, Auth and the REST API in Docker, with `supabase/migrations` applied and a test user created. Without it, the integration tests and the real-backend E2E journeys are skipped locally. In CI, a skipped one counts as a failure (`PUB_ORDER_REQUIRE_INTEGRATION=1`), so a broken setup can't pass quietly.
 
-GitHub Actions ([.github/workflows/tests.yml](../.github/workflows/tests.yml)) runs on every pull request and every push to `main`. The **backend** and **frontend** jobs run install → lint → type check → unit tests → integration tests → coverage report, stopping at the first failure. Coverage below 70% of branches fails the job. A **security** job runs alongside them: secret scan (gitleaks), static analysis (Bandit, Semgrep) and dependency audits (pip-audit, npm audit), failing on any High finding; see [security/scans/](security/scans/README.md). **e2e** runs after backend and frontend pass, and **deliver** packages a versioned build on every push to `main` once every job, including security, has passed.
+GitHub Actions ([.github/workflows/tests.yml](../.github/workflows/tests.yml)) runs on every pull request and every push to `main`. The **backend** and **frontend** jobs run install → lint → type check → unit tests → integration tests → coverage report, stopping at the first failure. Coverage below 70% of branches fails the job. A **security** job runs alongside them: secret scan (gitleaks), static analysis (Bandit, Semgrep) and dependency audits (pip-audit, npm audit), failing on any High finding; see [security/scans/](security/scans/README.md). **e2e** runs after backend and frontend pass, and **deliver** packages a versioned build on every push to `main` once every job, including security, has passed. It smoke-tests both the zip and the Docker image that Render deploys to staging: the page loads, `/config.js` carries the configured public key, and `/api/me` returns 401 without a token.
 
 ## Seam map
 
@@ -119,6 +119,20 @@ Covers `POST /orders`, `GET /orders` and `GET /orders/{id}` in [app/orders.py](.
 | [`test_guest_cannot_read_orders`](../backend/tests/test_orders.py#L252) ×2 | Reading orders without a token gives 401. |
 | [`test_read_failures_are_sanitized`](../backend/tests/test_orders.py#L260) ×2 | Read errors give 503 without leaking details. |
 
+### Cancelling an order: [test_cancel_order.py](../backend/tests/test_cancel_order.py)
+
+Covers `POST /orders/{id}/cancel` in [app/orders.py](../backend/app/orders.py) (US23), with a fake database client. The ownership and status rules are in the `cancel_order` database function, covered by the integration tests.
+
+| Test | What it checks |
+|---|---|
+| [`test_student_can_cancel_their_order`](../backend/tests/test_cancel_order.py#L15) | Calls `cancel_order` with the order id and returns the cancelled order. |
+| [`test_cancel_errors_are_mapped`](../backend/tests/test_cancel_order.py#L34) ×4 | Signed out (an expired token) gives 401, not found (or not yours) gives 404, already started gives 409, anything else gives 503, without database details. |
+| [`test_too_late_message_matches_the_order_status`](../backend/tests/test_cancel_order.py#L51) ×3 | The 409 message matches the status the database reports: started, ready for pickup, or picked up. |
+| [`test_cancel_still_succeeds_when_reading_the_order_back_fails`](../backend/tests/test_cancel_order.py#L61) ×2 | **Failure path:** once the cancel is saved, a failed or empty read-back still returns 200 with the Cancelled status. |
+| [`test_cancel_requires_a_token`](../backend/tests/test_cancel_order.py#L77) | Without a token the request gets 401 and nothing reaches the database. |
+| [`test_cancel_rejects_a_malformed_order_id`](../backend/tests/test_cancel_order.py#L84) | A malformed id gives 422. |
+| [`test_kitchen_cannot_reopen_a_cancelled_order`](../backend/tests/test_cancel_order.py#L91) | A kitchen status change to a cancelled order gives 409. |
+
 ### Settings: [test_config.py](../backend/tests/test_config.py)
 
 Covers `get_settings` and `Settings` in [app/config.py](../backend/app/config.py).
@@ -190,6 +204,9 @@ Marked `integration`. No mocks: reads go through FastAPI, real auth and `app/ord
 | [`test_student_cannot_change_their_own_order_status`](../backend/tests/integration/test_order_tracking_database.py#L102) | **Failure path:** the database refuses a student's own token updating the status, and it stays Received. |
 | [`test_database_rejects_an_unknown_status`](../backend/tests/integration/test_order_tracking_database.py#L110) | **Failure path:** the database refuses a status outside Received, Preparing, Ready, Collected. |
 | [`test_guest_cannot_track_an_order`](../backend/tests/integration/test_order_tracking_database.py#L118) | **Failure path:** reading one order or the list without a token gives 401. |
+| [`test_student_cancels_a_received_order`](../backend/tests/integration/test_order_tracking_database.py#L123) | **US23, stored result:** cancelling stores Cancelled; cancelling again still succeeds. |
+| [`test_another_student_cannot_cancel_the_order`](../backend/tests/integration/test_order_tracking_database.py#L136) | **US23 failure path:** a second student gets 404 and the order stays Received. |
+| [`test_cancel_is_refused_once_the_kitchen_starts`](../backend/tests/integration/test_order_tracking_database.py#L144) | **US23 failure path:** once the order is Preparing, cancelling gives 409 and the status is unchanged. |
 
 ### Integration: real sign-in: [integration/test_supabase_auth.py](../backend/tests/integration/test_supabase_auth.py)
 
@@ -200,6 +217,15 @@ Marked `integration`. Uses the test user that CI creates in the local Supabase.
 | [`test_real_token_returns_the_signed_in_user`](../backend/tests/integration/test_supabase_auth.py#L42) | Signs the test user in with Supabase, sends the real token to `/me`, and gets 200 with the same email. |
 | [`test_garbage_token_is_rejected`](../backend/tests/integration/test_supabase_auth.py#L49) | **Failure path:** real Supabase rejects a made-up token, so `/me` returns 401. |
 | [`test_token_with_tampered_signature_is_rejected`](../backend/tests/integration/test_supabase_auth.py#L55) | **Failure path:** a real token with a changed signature is rejected with 401. |
+
+### Integration: who can sign up (SEC-02): [integration/test_signup_database.py](../backend/tests/integration/test_signup_database.py)
+
+Marked `integration`, local Supabase only. Signs up through Supabase Auth with the public key, the way the browser does, and deletes any account it creates.
+
+| Test | What it checks |
+|---|---|
+| [`test_signup_with_a_non_vanderbilt_email_is_refused`](../backend/tests/integration/test_signup_database.py#L59) | **SEC-02 regression, failure path:** signing up with a `@gmail.com` address raises an Auth error and no account is created. |
+| [`test_signup_with_a_vanderbilt_email_creates_a_student`](../backend/tests/integration/test_signup_database.py#L68) | A `@vanderbilt.edu` sign-up works, and its profile is a student (SEC-01). |
 
 ### Release server: [test_serve.py](../backend/tests/test_serve.py)
 
@@ -297,45 +323,47 @@ These run before anything is sent to Supabase.
 | [rejects a badly formed email](../frontend/src/Login.test.jsx#L54) | An email like `not-an-email` shows "Enter a valid email address." |
 | [requires the confirmation password on sign up](../frontend/src/Login.test.jsx#L64) | On Sign up, leaving "Confirm password" empty shows "Confirm your password." |
 | [rejects mismatched passwords on sign up](../frontend/src/Login.test.jsx#L75) | On Sign up, two different passwords show "Passwords do not match." |
+| [only lets a Vanderbilt email sign up (SEC-02)](../frontend/src/Login.test.jsx#L87) | On Sign up, `someone@gmail.com` shows "Use your @vanderbilt.edu email address." and Supabase isn't called. The database enforces the same rule, since sign-up can skip this page. |
+| [still lets an existing account with another email sign in](../frontend/src/Login.test.jsx#L97) | Sign in doesn't apply the Vanderbilt rule, so existing accounts with other addresses still work. |
 
 #### Form controls
 
 | Test | What it checks |
 |---|---|
-| [shows and hides the password](../frontend/src/Login.test.jsx#L89) | The Show/Hide button switches the password between hidden and visible text. |
-| [switches tabs and clears errors](../frontend/src/Login.test.jsx#L103) | Switching to Sign up clears existing errors and adds the "Confirm password" field and a "Create account" button; switching back removes the field. |
-| [explains when Supabase is not configured](../frontend/src/Login.test.jsx#L121) | With no Supabase settings, submitting shows "Sign-in is not configured yet." and makes no request. |
+| [shows and hides the password](../frontend/src/Login.test.jsx#L110) | The Show/Hide button switches the password between hidden and visible text. |
+| [switches tabs and clears errors](../frontend/src/Login.test.jsx#L124) | Switching to Sign up clears existing errors and adds the "Confirm password" field and a "Create account" button; switching back removes the field. |
+| [explains when Supabase is not configured](../frontend/src/Login.test.jsx#L142) | With no Supabase settings, submitting shows "Sign-in is not configured yet." and makes no request. |
 
 #### Signing in
 
 | Test | What it checks |
 |---|---|
-| [signs in and confirms the session with the backend](../frontend/src/Login.test.jsx#L151) | A successful sign-in trims spaces from the email, sends the token to `/api/me` as `Bearer <token>`, and shows "Signed in as …". |
-| [shows a message for the … error](../frontend/src/Login.test.jsx#L169) ×3 | Supabase error codes show the right message: `invalid_credentials` → "Email or password is incorrect.", `email_not_confirmed` → "You need to confirm your email…", anything else → "Could not sign in. Try again." |
-| [handles a response with no session and no error](../frontend/src/Login.test.jsx#L184) | If Supabase returns neither a session nor an error, the generic "Could not sign in" message appears. |
-| [shows the backend error when the session cannot be confirmed](../frontend/src/Login.test.jsx#L194) | If `/api/me` fails, the backend's error message is shown and the "Signed in" message isn't. |
-| [falls back to a generic message when the backend returns no JSON](../frontend/src/Login.test.jsx#L206) | If `/api/me` fails without a readable body, "The server could not confirm this sign-in." is shown. |
-| [disables the submit button while signing in](../frontend/src/Login.test.jsx#L217) | While sign-in is in progress, the button reads "Signing in…" and can't be clicked; it's enabled again afterwards. |
+| [signs in and confirms the session with the backend](../frontend/src/Login.test.jsx#L172) | A successful sign-in trims spaces from the email, sends the token to `/api/me` as `Bearer <token>`, and shows "Signed in as …". |
+| [shows a message for the … error](../frontend/src/Login.test.jsx#L190) ×3 | Supabase error codes show the right message: `invalid_credentials` → "Email or password is incorrect.", `email_not_confirmed` → "You need to confirm your email…", anything else → "Could not sign in. Try again." |
+| [handles a response with no session and no error](../frontend/src/Login.test.jsx#L205) | If Supabase returns neither a session nor an error, the generic "Could not sign in" message appears. |
+| [shows the backend error when the session cannot be confirmed](../frontend/src/Login.test.jsx#L215) | If `/api/me` fails, the backend's error message is shown and the "Signed in" message isn't. |
+| [falls back to a generic message when the backend returns no JSON](../frontend/src/Login.test.jsx#L227) | If `/api/me` fails without a readable body, "The server could not confirm this sign-in." is shown. |
+| [disables the submit button while signing in](../frontend/src/Login.test.jsx#L238) | While sign-in is in progress, the button reads "Signing in…" and can't be clicked; it's enabled again afterwards. |
 
 #### Signing up
 
 | Test | What it checks |
 |---|---|
-| [shows a message for the … error](../frontend/src/Login.test.jsx#L235) ×4 | Supabase error codes show the right message: `user_already_exists` and `email_exists` → "An account with this email already exists.", `weak_password` → "Use at least 6 characters.", anything else → "Could not create the account. Try again." |
-| [sends the user to sign in when email confirmation is required](../frontend/src/Login.test.jsx#L254) | If Supabase creates the account without a session, the page switches to Sign in, keeps the email, clears the password, and shows "Account created. Sign in to continue." |
-| [signs in immediately when Supabase returns a session](../frontend/src/Login.test.jsx#L268) | If Supabase returns a session right away, the page confirms it with `/api/me` and shows "Signed in as …". |
+| [shows a message for the … error](../frontend/src/Login.test.jsx#L256) ×4 | Supabase error codes show the right message: `user_already_exists` and `email_exists` → "An account with this email already exists.", `weak_password` → "Use at least 6 characters.", anything else → "Could not create the account. Try again." Sign-up asks Supabase to send the confirmation link back to this site. |
+| [sends the user to sign in when email confirmation is required](../frontend/src/Login.test.jsx#L276) | If Supabase creates the account without a session, the page switches to Sign in, keeps the email, clears the password, and shows "Account created. Check your email for a confirmation link, then sign in." |
+| [signs in immediately when Supabase returns a session](../frontend/src/Login.test.jsx#L290) | If Supabase returns a session right away, the page confirms it with `/api/me` and shows "Signed in as …". |
 
 #### Callbacks to the app
 
 | Test | What it checks |
 |---|---|
-| [reports the signed-in email after signing in](../frontend/src/Login.test.jsx#L284) | `onSignedIn` is called once with the email, so the app can open the menu. |
-| [reports the signed-in email after a sign-up that returns a session](../frontend/src/Login.test.jsx#L297) | The same happens after a sign-up that signs the user in right away. |
-| [does not report a sign-in that Supabase rejects](../frontend/src/Login.test.jsx#L310) | A failed sign-in doesn't open the menu. |
-| [does not report a sign-in the backend cannot confirm](../frontend/src/Login.test.jsx#L322) | If `/api/me` fails, the menu isn't opened. |
-| [shows Browse menu only when the app provides it](../frontend/src/Login.test.jsx#L335) | The button appears and calls `onBrowse`. |
-| [hides Browse menu without a handler](../frontend/src/Login.test.jsx#L344) | Without `onBrowse`, there's no button. |
-| [disables Browse menu while signing in](../frontend/src/Login.test.jsx#L350) | The user can't leave mid-sign-in. |
+| [reports the signed-in email after signing in](../frontend/src/Login.test.jsx#L306) | `onSignedIn` is called once with the email, so the app can open the menu. |
+| [reports the signed-in email after a sign-up that returns a session](../frontend/src/Login.test.jsx#L319) | The same happens after a sign-up that signs the user in right away. |
+| [does not report a sign-in that Supabase rejects](../frontend/src/Login.test.jsx#L332) | A failed sign-in doesn't open the menu. |
+| [does not report a sign-in the backend cannot confirm](../frontend/src/Login.test.jsx#L344) | If `/api/me` fails, the menu isn't opened. |
+| [shows Browse menu only when the app provides it](../frontend/src/Login.test.jsx#L357) | The button appears and calls `onBrowse`. |
+| [hides Browse menu without a handler](../frontend/src/Login.test.jsx#L366) | Without `onBrowse`, there's no button. |
+| [disables Browse menu while signing in](../frontend/src/Login.test.jsx#L372) | The user can't leave mid-sign-in. |
 
 ### Menu page and checkout review: [Menu.test.jsx](../frontend/src/Menu.test.jsx)
 
@@ -414,7 +442,8 @@ Covers [order-status.js](../frontend/src/order-status.js), the rules shared by t
 | [statusSteps](../frontend/src/order-status.test.js#L14) ×4 | Each of the four steps is marked done, current or upcoming; Collected shows the whole journey done; Ready is labelled "Ready for pickup"; the order matches the database's allowed statuses. |
 | [status wording](../frontend/src/order-status.test.js#L32) ×3 | Every status has a title and a next step; an unknown status falls back to its raw value; "meal swipe(s)" is pluralized. |
 | [order ids](../frontend/src/order-status.test.js#L52) ×2 | Only UUIDs count as order ids, so a mistyped link never reaches the API; the counter number is the first 8 characters in capitals. |
-| [isOpenOrder](../frontend/src/order-status.test.js#L65) | Every status except Collected keeps the page checking for updates. |
+| [isOpenOrder](../frontend/src/order-status.test.js#L65) | Every status except Collected and Cancelled keeps the page checking for updates. |
+| [canCancel](../frontend/src/order-status.test.js#L74) | Only a Received order offers Cancel (US23). |
 | [isOrder](../frontend/src/order-status.test.js#L73) ×7 | A response shaped like the API's order is accepted; a missing body, bad id, unknown status, zero swipes or bad items are rejected. |
 | [formatPlacedAt](../frontend/src/order-status.test.js#L90) ×3 | "today at …" for today's orders, the date for older ones, nothing for an unreadable time. |
 
@@ -435,6 +464,12 @@ Covers [order-api.js](../frontend/src/order-api.js) (US4, US6). Supabase and `fe
 | [lists the student's orders](../frontend/src/order-api.test.js#L78) | `GET /api/orders` returns the list. |
 | [asks a guest or an expired session to sign in](../frontend/src/order-api.test.js#L84) | No session or a 401 asks for sign-in. |
 | [throws when the server fails or sends something that is not a list of orders](../frontend/src/order-api.test.js#L91) | A server error or a malformed list throws a friendly error. |
+| [posts the cancel with the login token](../frontend/src/order-api.test.js#L100) | **US23:** `POST /api/orders/{id}/cancel` carries `Bearer <token>` and returns the cancelled order. |
+| [reports a %i without throwing](../frontend/src/order-api.test.js#L111) ×2 | 401 asks for sign-in, 404 is not found. |
+| [passes on the server’s reason when it is too late to cancel](../frontend/src/order-api.test.js#L118) | A 409 returns "too late" with the server's message. |
+| [accepts a cancel confirmed with only the id and status](../frontend/src/order-api.test.js#L125) | A short `{id, status: Cancelled}` reply counts as a cancel. |
+| [rejects a short reply that does not confirm the cancel](../frontend/src/order-api.test.js#L130) | A short reply with any other status is a failure. |
+| [throws a friendly error when the server fails](../frontend/src/order-api.test.js#L135) | A 503 becomes "Could not cancel this order. Please try again." |
 
 ### Order confirmation and pickup tracking: [OrderPage.test.jsx](../frontend/src/OrderPage.test.jsx)
 
@@ -458,6 +493,14 @@ Covers [OrderPage.jsx](../frontend/src/OrderPage.jsx) (US4, US6). The API module
 | [keeps the last status on screen when a refresh fails](../frontend/src/OrderPage.test.jsx#L193) | **Failure path:** a failed refresh keeps the last status and says it may be out of date. |
 | [shows the not-found page if the order disappears while open](../frontend/src/OrderPage.test.jsx#L205) | A 404 on refresh switches to not found. |
 | [ignores an older response that arrives after a newer one](../frontend/src/OrderPage.test.jsx#L215) | A slow, older response can't overwrite a newer status. |
+| [cancels a Received order after the student confirms](../frontend/src/OrderPage.test.jsx#L234) | **US23:** **Cancel order** asks to confirm, then shows Cancelled without the progress steps or the button. |
+| [does nothing when the student changes their mind](../frontend/src/OrderPage.test.jsx#L246) | Dismissing the confirmation sends nothing. |
+| [explains when the kitchen started first and shows the new status](../frontend/src/OrderPage.test.jsx#L255) | **US23 failure path:** a 409 explains why and shows the latest status. |
+| [keeps the cancel when an older status read finishes after it](../frontend/src/OrderPage.test.jsx#L268) | **US23 regression:** a status read that started before the cancel can't bring back "Waiting for the kitchen" or the button. |
+| [keeps the order details when the server confirms the cancel without them](../frontend/src/OrderPage.test.jsx#L283) | A short cancel reply keeps the items on screen. |
+| [shows the server’s reason when the order is too far along to cancel](../frontend/src/OrderPage.test.jsx#L293) | The 409 message from the server is shown. |
+| [clears the too-late message once the order moves on](../frontend/src/OrderPage.test.jsx#L304) | The "too late" alert goes away when the status changes again. |
+| [offers no cancel once the kitchen has started](../frontend/src/OrderPage.test.jsx#L319) | A Preparing order has no **Cancel order** button. |
 
 ### My orders: [MyOrders.test.jsx](../frontend/src/MyOrders.test.jsx)
 
@@ -465,11 +508,12 @@ Covers [MyOrders.jsx](../frontend/src/MyOrders.jsx) (US6). The API module is fak
 
 | Test | What it checks |
 |---|---|
-| [separates orders still in progress from ones already picked up](../frontend/src/MyOrders.test.jsx#L28) | Orders are grouped into "In progress" and "Picked up" with their status. |
-| [opens an order from the list](../frontend/src/MyOrders.test.jsx#L39) | **View** opens that order. |
-| [points a student with no orders back to the menu](../frontend/src/MyOrders.test.jsx#L48) | An empty list links to the menu. |
-| [asks a signed-out student to sign in](../frontend/src/MyOrders.test.jsx#L57) | A guest is asked to sign in. |
-| [shows the error and loads again on retry or refresh](../frontend/src/MyOrders.test.jsx#L66) | **Failure path:** a failed load shows the error; **Try again** and **Refresh list** reload. |
+| [separates orders still in progress from ones already picked up](../frontend/src/MyOrders.test.jsx#L28) | Orders are grouped into "In progress" and "Past orders" with their status. |
+| [never files a cancelled order under "Picked up"](../frontend/src/MyOrders.test.jsx#L39) | **US23 regression:** a cancelled order is listed under "Past orders" with a Cancelled chip; there is no "Picked up" heading. |
+| [opens an order from the list](../frontend/src/MyOrders.test.jsx#L49) | **View** opens that order. |
+| [points a student with no orders back to the menu](../frontend/src/MyOrders.test.jsx#L58) | An empty list links to the menu. |
+| [asks a signed-out student to sign in](../frontend/src/MyOrders.test.jsx#L67) | A guest is asked to sign in. |
+| [shows the error and loads again on retry or refresh](../frontend/src/MyOrders.test.jsx#L76) | **Failure path:** a failed load shows the error; **Try again** and **Refresh list** reload. |
 
 ### Page switching: [App.test.jsx](../frontend/src/App.test.jsx)
 
@@ -524,6 +568,10 @@ Checks the dev-server settings the frontend needs to reach the backend. A wrong 
 ## Database: [supabase/tests/menu_items.sql](../supabase/tests/menu_items.sql)
 
 The backend CI job runs this script against the local test database, after `supabase start` has applied [the menu migration](../supabase/migrations/202610120001_menu_items.sql). It checks that the 22 seed items exist (11 counted as entrées), that invalid swipe types are refused, that row-level security is on, and that guests and students can read the menu but not change it. It runs inside a transaction, so nothing is left behind.
+
+## Database: [supabase/tests/roles.sql](../supabase/tests/roles.sql)
+
+Runs the same way, after every migration. For SEC-02 it checks that the database refuses an account for a non-Vanderbilt address (`someone@gmail.com`, `kitchen@puborder.test`, and the look-alike `vanderbilt.edu.evil.com`) and refuses changing an account's email to one, while accepting `@vanderbilt.edu` in any letter case. For SEC-01 it checks that every new account is a student, and grants the kitchen role with a direct `profiles` update, the only way staff get it. It then checks the student and kitchen roles, that only the kitchen can change an order's status or mark items sold out, and for US23 that a student can cancel their own Received order while the kitchen can neither reopen nor cancel it. It also checks the grant on `cancel_order`: `anon` and `public` cannot execute it and `authenticated` can. Calling it as `anon` would fail with 42501 even without the revoke, so only the grant check catches a missing revoke.
 
 ## E2E (Playwright)
 

@@ -1,6 +1,6 @@
 // Unit tests for reading saved orders from the API (US4, US6). Supabase and fetch are faked.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { loadOrder, loadOrders, updateOrderStatus } from './order-api.js';
+import { cancelOrder, emailStudent, loadOrder, loadOrders, updateOrderStatus } from './order-api.js';
 import { getSupabase } from './supabase.js';
 
 vi.mock('./supabase.js', () => ({ getSupabase: vi.fn() }));
@@ -96,6 +96,48 @@ describe('loadOrders', () => {
   });
 });
 
+describe('cancelOrder', () => {
+  it('posts the cancel with the login token', async () => {
+    fetch.mockResolvedValueOnce(response({ ...order, status: 'Cancelled' }));
+
+    await expect(cancelOrder(ID)).resolves.toEqual({ order: { ...order, status: 'Cancelled' } });
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe(`/api/orders/${ID}/cancel`);
+    expect(options.method).toBe('POST');
+    expect(options.headers.Authorization).toBe('Bearer test-token');
+  });
+
+  it.each([[401, { signInRequired: true }], [404, { notFound: true }]])(
+    'reports a %i without throwing', async (status, expected) => {
+      fetch.mockResolvedValueOnce(response({ detail: 'no' }, status));
+      await expect(cancelOrder(ID)).resolves.toEqual(expected);
+    },
+  );
+
+  it('passes on the server’s reason when it is too late to cancel', async () => {
+    fetch.mockResolvedValueOnce(response({ detail: 'This order is ready for pickup, so it can’t be cancelled.' }, 409));
+    await expect(cancelOrder(ID)).resolves.toEqual({
+      tooLate: true, message: 'This order is ready for pickup, so it can’t be cancelled.',
+    });
+  });
+
+  it('accepts a cancel confirmed with only the id and status', async () => {
+    fetch.mockResolvedValueOnce(response({ id: ID, status: 'Cancelled' }));
+    await expect(cancelOrder(ID)).resolves.toEqual({ order: { id: ID, status: 'Cancelled' } });
+  });
+
+  it('rejects a short reply that does not confirm the cancel', async () => {
+    fetch.mockResolvedValueOnce(response({ id: ID, status: 'Received' }));
+    await expect(cancelOrder(ID)).rejects.toThrow('Could not cancel this order. Please try again.');
+  });
+
+  it('throws a friendly error when the server fails', async () => {
+    fetch.mockResolvedValueOnce(response({ detail: 'down' }, 503));
+    await expect(cancelOrder(ID)).rejects.toThrow('Could not cancel this order. Please try again.');
+  });
+});
+
 describe('updateOrderStatus', () => {
   it('sends the new status with the login token', async () => {
     fetch.mockResolvedValueOnce(response({ ...order, status: 'Ready' }));
@@ -114,5 +156,27 @@ describe('updateOrderStatus', () => {
     await expect(updateOrderStatus(ID, 'Ready')).resolves.toEqual({ forbidden: true });
     fetch.mockResolvedValueOnce(response({ detail: 'Order not found.' }, 404));
     await expect(updateOrderStatus(ID, 'Ready')).resolves.toEqual({ notFound: true });
+  });
+});
+
+describe('emailStudent', () => {
+  it('asks the backend to send an order notification', async () => {
+    fetch.mockResolvedValueOnce(response({ delivered: true }));
+
+    await expect(emailStudent(ID)).resolves.toEqual({ delivered: true });
+
+    const [url, options] = fetch.mock.calls[0];
+    expect(url).toBe(`/api/orders/${ID}/notification`);
+    expect(options.method).toBe('POST');
+    expect(options.headers.Authorization).toBe('Bearer test-token');
+  });
+
+  it('reports authorization, missing order, and old orders without email', async () => {
+    fetch.mockResolvedValueOnce(response({}, 403));
+    await expect(emailStudent(ID)).resolves.toEqual({ forbidden: true });
+    fetch.mockResolvedValueOnce(response({}, 404));
+    await expect(emailStudent(ID)).resolves.toEqual({ notFound: true });
+    fetch.mockResolvedValueOnce(response({}, 409));
+    await expect(emailStudent(ID)).resolves.toEqual({ noEmail: true });
   });
 });

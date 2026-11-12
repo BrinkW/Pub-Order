@@ -1,0 +1,8 @@
+# Runs the production build locally: docker compose up --build, then open http://localhost:8000.
+# Reads SUPABASE_URL and SUPABASE_KEY (the anon key) from the root .env.
+services:
+  pub-order:
+    build: .
+    env_file: .env
+    ports:
+      - "8000:8000"

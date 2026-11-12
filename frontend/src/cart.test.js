@@ -175,6 +175,13 @@ describe('summary, search, and review details', () => {
     expect(vegan.every((item) => item.label === 'Vegan')).toBe(true);
   });
 
+  test('search matches allergen and preference markers', () => {
+    const gluten = filterMenu('gluten', 'All', menu);
+    expect(gluten.length).toBeGreaterThan(0);
+    expect(gluten.every((item) => item.markers?.includes('Gluten'))).toBe(true);
+    expect(filterMenu('local ingredient', 'All', menu).map((item) => item.id)).toEqual(['pub-burger']);
+  });
+
   test('an empty search with a category returns exactly that category', () => {
     const sides = filterMenu('', 'Grill Side', menu);
     expect(sides.length).toBe(menu.filter((item) => item.category === 'Grill Side').length);

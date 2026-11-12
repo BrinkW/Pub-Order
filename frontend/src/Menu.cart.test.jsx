@@ -6,6 +6,8 @@ import { CART_STORAGE_KEY } from './cart.js';
 import Menu from './Menu.jsx';
 import { MENU_ITEMS } from './menu-data.js';
 
+vi.mock('./CrowdMeter.jsx', () => ({ CrowdMeter: () => null, CrowdMeterControls: () => null }));
+
 const catalog = MENU_ITEMS.map((item) => ({ ...item, available: true }));
 const entrees = catalog.filter((item) => item.swipeType === 'Entry');
 
@@ -118,6 +120,14 @@ describe('Ordering one step at a time', () => {
     fireEvent.error(image);
 
     expect(image.getAttribute('src')).toMatch(/^data:image\/svg\+xml/);
+  });
+  it('shows every Pub marker instead of only one dietary label', async () => {
+    await setup();
+    const burger = screen.getByRole('heading', { name: 'Pub Burger' }).closest('article');
+
+    expect(within(burger).getByText('Gluten')).toBeInTheDocument();
+    expect(within(burger).getByText('Sesame')).toBeInTheDocument();
+    expect(within(burger).getByText('Features Local Ingredient')).toBeInTheDocument();
   });
 
   it('clears the order and saves a choice', async () => {

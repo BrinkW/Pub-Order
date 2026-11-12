@@ -3,11 +3,13 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Kitchen from './Kitchen.jsx';
 import { loadMenu, setItemAvailability } from './menu-api.js';
-import { loadOrders, updateOrderStatus } from './order-api.js';
+import { emailStudent, loadOrders, updateOrderStatus } from './order-api.js';
 
+vi.mock('./CrowdMeter.jsx', () => ({ CrowdMeter: () => null, CrowdMeterControls: () => null }));
 vi.mock('./order-api.js', () => ({
   loadOrders: vi.fn(),
   updateOrderStatus: vi.fn(),
+  emailStudent: vi.fn(),
 }));
 
 vi.mock('./menu-api.js', () => ({
@@ -18,6 +20,7 @@ vi.mock('./menu-api.js', () => ({
 const ID = '0a1b2c3d-0000-4000-8000-000000000001';
 const order = {
   id: ID, status: 'Received', swipes: 1, createdAt: '2026-10-20T16:00:00+00:00',
+  studentEmail: 'student@vanderbilt.edu',
   items: [{ id: 'burger', name: 'Pub Burger', swipeType: 'Entry', quantity: 1 }],
 };
 
@@ -26,6 +29,7 @@ const burger = { id: 'pub-burger', name: 'Pub Burger', category: 'Grill Main', s
 beforeEach(() => {
   loadOrders.mockReset();
   updateOrderStatus.mockReset();
+  emailStudent.mockReset();
   loadMenu.mockReset();
   setItemAvailability.mockReset();
   loadMenu.mockResolvedValue([]);
@@ -46,6 +50,16 @@ describe('Kitchen orders', () => {
 
     expect(updateOrderStatus).toHaveBeenCalledWith(ID, 'Preparing');
     expect(await screen.findByRole('button', { name: 'Preparing' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('moves a cancelled order out of the open queue with no status buttons (US23)', async () => {
+    loadOrders.mockResolvedValue({ orders: [{ ...order, status: 'Cancelled' }] });
+    render(<Kitchen email="kitchen@puborder.test" onSignOut={vi.fn()} />);
+
+    expect(await screen.findByRole('heading', { name: 'Closed' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Open' })).not.toBeInTheDocument();
+    expect(screen.getByText('Cancelled')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Preparing' })).not.toBeInTheDocument();
   });
 
   it('tells a student account it cannot change status', async () => {
@@ -71,5 +85,17 @@ describe('Kitchen orders', () => {
 
     expect(setItemAvailability).toHaveBeenCalledWith('pub-burger', false);
     expect(await screen.findByRole('button', { name: 'Sold out' })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('emails the current status to the student on the order', async () => {
+    loadOrders.mockResolvedValue({ orders: [order] });
+    emailStudent.mockResolvedValue({ delivered: true });
+    const user = userEvent.setup();
+    render(<Kitchen email="kitchen@puborder.test" onSignOut={vi.fn()} />);
+
+    await user.click(await screen.findByRole('button', { name: 'Email student' }));
+
+    expect(emailStudent).toHaveBeenCalledWith(ID);
+    expect(await screen.findByRole('button', { name: 'Email sent' })).toBeInTheDocument();
   });
 });
