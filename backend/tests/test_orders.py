@@ -244,6 +244,22 @@ def test_database_rejecting_the_meal_becomes_409(client, menu_database, database
     assert "menu changed" in response.json()["detail"]["message"]
 
 
+@pytest.mark.parametrize(("details", "message"), [
+    ("open_orders", "You already have 3 orders in progress."),
+    ("recent_orders", "You've placed 5 orders in the last 10 minutes."),
+    (None, "You already have 3 orders in progress."),
+])
+def test_order_limit_becomes_429_with_the_reason(client, menu_database, database, signed_in, details, message):
+    """SEC-03: the database refuses an order over a student's limit; the API says which limit."""
+    database.rpc_error = APIError({"message": "place_order: private", "code": "PT429", "details": details})
+
+    response = client.post("/orders", json=meal(), headers=HEADERS)
+
+    assert response.status_code == 429
+    assert response.json()["detail"].startswith(message)
+    assert "private" not in response.text
+
+
 @pytest.mark.parametrize("error", [
     APIError({"message": "private database details", "code": "XX000"}),
     httpx.ConnectError("private connection details"),

@@ -32,6 +32,11 @@ TYPE_ORDER = ["Entry", "Side", "Drink"]
 MAX_ORDER_PAGE = 100  # most orders one list request returns (the kitchen board uses the default)
 INVALID_ORDER = "22023"  # errcode raised by place_order() for a meal it won't accept
 WRONG_STATE = "55000"  # errcode for a cancel that is too late, or a status change to a cancelled order
+TOO_MANY_ORDERS = "PT429"  # errcode from place_order() when a student hits an order limit (SEC-03)
+ORDER_LIMIT_MESSAGES = {
+    "open_orders": "You already have 3 orders in progress. Pick one up or cancel one before ordering again.",
+    "recent_orders": "You've placed 5 orders in the last 10 minutes. Please wait a few minutes and try again.",
+}
 TOO_LATE_TO_CANCEL = {
     "Preparing": "The kitchen has already started this order, so it can't be cancelled.",
     "Ready": "This order is ready for pickup, so it can't be cancelled.",
@@ -158,6 +163,10 @@ def place_order(
                 "message": "The menu changed while you were ordering. Review your meal and try again.",
                 "issues": [],
             }) from exc
+        if exc.code == TOO_MANY_ORDERS:
+            # The database passes which limit was hit as the error detail.
+            message = ORDER_LIMIT_MESSAGES.get(exc.details or "", ORDER_LIMIT_MESSAGES["open_orders"])
+            raise HTTPException(429, message) from exc
         raise HTTPException(503, "Could not save your order. Your cart is still here; please try again.") from exc
     except Exception as exc:
         # Do not leak database details or credentials to the browser.
