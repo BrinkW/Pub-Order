@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+from uuid import UUID
 
 import httpx
 import pytest
@@ -37,6 +39,7 @@ class FakeDatabase:
         self.orderings = []
         self.limits = []
         self.lower_than = []
+        self.or_filters = []
 
     def rpc(self, name, params):
         self.rpc_calls.append((name, params))
@@ -44,7 +47,8 @@ class FakeDatabase:
         return self
 
     def from_(self, table):
-        self.mode, self.filter, self.cutoff, self.page = "select", None, None, None
+        self.mode, self.filter, self.cutoff, self.page, self.key_cutoff = "select", None, None, None, None
+        self.orderings = []
         return self
 
     def select(self, columns):
@@ -61,6 +65,14 @@ class FakeDatabase:
     def lt(self, column, value):
         self.lower_than.append((column, value))
         self.cutoff = value
+        return self
+
+    def or_(self, filters):
+        """Understands only the history cursor: older than (created_at, id)."""
+        self.or_filters.append(filters)
+        match = re.fullmatch(r'created_at\.lt\."([^"]+)",and\(created_at\.eq\."\1",id\.lt\.([0-9a-f-]+)\)', filters)
+        assert match, f"unexpected or filter: {filters}"
+        self.key_cutoff = (datetime.fromisoformat(match[1]), match[2])
         return self
 
     def limit(self, size):
@@ -84,6 +96,11 @@ class FakeDatabase:
         if self.cutoff is not None:
             cutoff = datetime.fromisoformat(self.cutoff)
             rows = [row for row in rows if datetime.fromisoformat(row["created_at"]) < cutoff]
+        if self.key_cutoff is not None:
+            stamp, last_id = self.key_cutoff
+            rows = [row for row in rows if (datetime.fromisoformat(row["created_at"]), row["id"]) < (stamp, last_id)]
+        if self.orderings:
+            rows = sorted(rows, key=lambda row: (datetime.fromisoformat(row["created_at"]), row["id"]), reverse=True)
         if self.page is not None:
             rows = rows[:self.page]
         return SimpleNamespace(data=rows)
@@ -272,7 +289,7 @@ def test_lists_the_students_orders_newest_first(client, database, signed_in):
 
     assert response.status_code == 200
     assert [order["id"] for order in response.json()] == [ORDER_ID, OLDER["id"]]
-    assert database.orderings == [("created_at", True)]
+    assert database.orderings == [("created_at", True), ("id", True)]
     assert database.tokens == ["test-token"]
 
 
@@ -299,8 +316,42 @@ def test_history_pages_back_from_the_last_order_shown(client, database, signed_i
     assert database.lower_than == [("created_at", "2026-10-19T12:00:00+00:00")]
 
 
+def test_history_paging_never_skips_orders_placed_at_the_same_instant(client, database, signed_in):
+    """US2 review: a page that ends in the middle of a timestamp tie picks up where it left off."""
+    same = "2026-10-19T12:00:00+00:00"
+    ids = [f"0a1b2c3d-0000-4000-8000-00000000000{n}" for n in range(1, 6)]
+    database.rows = [{**OLDER, "id": order_id, "created_at": same} for order_id in ids]
+
+    seen, cursor = [], {}
+    for _ in range(3):
+        page = client.get("/orders", params={"limit": 2, **cursor}, headers=HEADERS).json()
+        seen += [order["id"] for order in page]
+        if page:
+            cursor = {"before": page[-1]["createdAt"], "beforeId": page[-1]["id"]}
+
+    assert seen == sorted(ids, reverse=True)
+    assert database.or_filters[0] == (
+        f'created_at.lt."2026-10-19T12:00:00+00:00",and(created_at.eq."2026-10-19T12:00:00+00:00",id.lt.{ids[3]})'
+    )
+
+
+def test_history_cursor_is_compared_in_utc():
+    cursor = orders.history_cursor(datetime.fromisoformat("2026-10-19T07:00:00-05:00"), UUID(ORDER_ID))
+
+    noon = "2026-10-19T12:00:00+00:00"
+    assert cursor == f'created_at.lt."{noon}",and(created_at.eq."{noon}",id.lt.{ORDER_ID})'
+
+
+def test_history_needs_a_time_with_an_id(client, database, signed_in):
+    response = client.get("/orders", params={"beforeId": ORDER_ID}, headers=HEADERS)
+
+    assert response.status_code == 422
+    assert database.tokens == []
+
+
 @pytest.mark.parametrize("params", [
     {"limit": 0}, {"limit": orders.MAX_ORDER_PAGE + 1}, {"limit": "all"}, {"before": "yesterday"},
+    {"before": "2026-10-19T12:00:00+00:00", "beforeId": "not-an-id"},
 ])
 def test_history_rejects_bad_paging(client, database, signed_in, params):
     response = client.get("/orders", params=params, headers=HEADERS)

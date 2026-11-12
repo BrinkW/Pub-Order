@@ -573,6 +573,23 @@ The backend CI job runs this script against the local test database, after `supa
 
 Runs the same way, after every migration. For SEC-02 it checks that the database refuses an account for a non-Vanderbilt address (`someone@gmail.com`, `kitchen@puborder.test`, and the look-alike `vanderbilt.edu.evil.com`) and refuses changing an account's email to one, while accepting `@vanderbilt.edu` in any letter case. For SEC-01 it checks that every new account is a student, and grants the kitchen role with a direct `profiles` update, the only way staff get it. It then checks the student and kitchen roles, that only the kitchen can change an order's status or mark items sold out, and for US23 that a student can cancel their own Received order while the kitchen can neither reopen nor cancel it. It also checks the grant on `cancel_order`: `anon` and `public` cannot execute it and `authenticated` can. Calling it as `anon` would fail with 42501 even without the revoke, so only the grant check catches a missing revoke.
 
+## Database: [supabase/tests/realtime.sql](../supabase/tests/realtime.sql)
+
+Runs the same way. For US4 it checks that the `orders` table is published to Supabase Realtime (so status changes reach the student's browser) and that `order_items` is not. Row-level security still decides who receives each change. It is read-only, so there is nothing to roll back.
+
+## Order history (US2), notifications (US4) and refused-request logging (SEC-04)
+
+| File | What it checks |
+|---|---|
+| [backend/tests/test_orders.py](../backend/tests/test_orders.py) | `GET /orders` returns at most 100 orders, pages back by `before` + `beforeId`, never skips orders placed at the same instant, compares the cursor in UTC, and rejects bad paging values with 422. |
+| [backend/tests/integration/test_order_tracking_database.py](../backend/tests/integration/test_order_tracking_database.py) | Against the real database: another student's history never includes the order, paging goes back in time, and two orders with the same `created_at` each appear once. |
+| [backend/tests/test_security_log.py](../backend/tests/test_security_log.py) | Every 401 and 403 is logged with method and path, and a token sent in the header or URL never reaches the log. |
+| [frontend/src/MyOrders.test.jsx](../frontend/src/MyOrders.test.jsx) | Each row shows its date and total; Load older orders asks for the page before the oldest order shown and appears only when the last page was full; a failed older page keeps what is on screen. |
+| [frontend/src/order-notifications.test.js](../frontend/src/order-notifications.test.js) | Which status changes notify (Preparing, Ready), that each notifies once (even after a stale read), that another student's row is ignored, and the browser notification and permission. |
+| [frontend/src/useOrderNotifications.test.jsx](../frontend/src/useOrderNotifications.test.jsx) | The Realtime subscription is filtered to the signed-in student; the app polls only while Realtime is down and an order is in progress, and keeps going after a failed poll. |
+| [frontend/src/OrderNotices.test.jsx](../frontend/src/OrderNotices.test.jsx), [OrderPage.test.jsx](../frontend/src/OrderPage.test.jsx) | The corner notices open or dismiss; the order page re-reads on a live update for its order and offers browser alerts only for an open order. |
+| [frontend/src/order-tracking.integration.test.jsx](../frontend/src/order-tracking.integration.test.jsx) | The whole app: a Realtime update shows a Ready notice on the menu that opens the order, and updates an open order page without a notice. |
+
 ## E2E (Playwright)
 
 Location: [frontend/e2e/](../frontend/e2e/). Run with `npm run test:e2e` from `frontend/`. Playwright starts the Vite dev server itself; with a test user set (as in CI, against the local Supabase), it also starts the backend on port 8001. Configuration is in [playwright.config.js](../frontend/playwright.config.js). Each test gets a fresh browser profile, so carts don't carry between tests. [menu-fixture.js](../frontend/e2e/menu-fixture.js) answers the browser's `/api/menu` request with the seed menu, so most journeys don't need the backend or database. The sign-in and full-stack journeys use the real ones.

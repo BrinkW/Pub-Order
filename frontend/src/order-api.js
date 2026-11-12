@@ -37,13 +37,15 @@ export const HISTORY_PAGE_SIZE = 20;
 
 // Returns { orders } (newest first) or { signInRequired }. Throws when the request fails.
 // With no options this is the newest page the server allows (the kitchen board uses that).
-// `limit` and `before` (an order's createdAt) page back through a student's history.
-export async function loadOrders(signal, { limit, before } = {}) {
+// `limit`, `before` and `beforeId` (the createdAt and id of the oldest order shown) page back
+// through a student's history. The id breaks ties between orders placed at the same instant.
+export async function loadOrders(signal, { limit, before, beforeId } = {}) {
   const token = await accessToken();
   if (!token) return { signInRequired: true };
   const query = new URLSearchParams();
   if (limit) query.set('limit', String(limit));
   if (before) query.set('before', before);
+  if (before && beforeId) query.set('beforeId', beforeId);
   const url = query.size ? `/api/orders?${query}` : '/api/orders';
   const response = await getJson(url, token, signal);
   if (response.status === 401) return { signInRequired: true };

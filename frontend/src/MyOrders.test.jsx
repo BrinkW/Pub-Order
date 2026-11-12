@@ -114,7 +114,9 @@ describe('My orders', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Load older orders' }));
 
-    expect(loadOrders).toHaveBeenLastCalledWith(expect.anything(), { limit: 2, before: '2026-10-05T12:00:00+00:00' });
+    expect(loadOrders).toHaveBeenLastCalledWith(expect.anything(), {
+      limit: 2, before: '2026-10-05T12:00:00+00:00', beforeId: '0a1b2c3d-0000-4000-8000-000000000003',
+    });
     const past = screen.getByRole('region', { name: 'Past orders' });
     await waitFor(() => expect(within(past).getAllByRole('listitem')).toHaveLength(2));
     // Fewer than a full page came back, so that was the oldest page.

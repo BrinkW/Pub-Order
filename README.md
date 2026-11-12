@@ -52,7 +52,7 @@ Before using the app, apply the migrations in `supabase/migrations/` once, in fi
 
 **Order history (US2).** `GET /api/orders` returns the signed-in student's orders newest first, at most 100 per request. Pass `limit` (1–100) and `before` (the `createdAt` of the oldest order you already have) to page back; the My orders page loads 20 at a time with "Load older orders".
 
-**Student notifications (US4).** When staff move an order to Preparing or Ready, the student sees a notice in the corner of any page, and a browser notification too if they turned on browser alerts from the order page. Updates arrive over Supabase Realtime; apply `202611120001_order_realtime.sql` so the `orders` table is published (row-level security still limits each student to their own orders). If Realtime isn't available, the app polls every 15 seconds while an order is in progress. Each status change notifies once.
+**Student notifications (US4).** When staff move an order to Preparing or Ready, the student sees a notice in the corner of any page, and a browser notification too if they turned on browser alerts from the order page. Updates arrive over Supabase Realtime; apply `202611120004_order_realtime.sql` so the `orders` table is published (row-level security still limits each student to their own orders). If Realtime isn't available, the app polls every 15 seconds while an order is in progress. Each status change notifies once.
 
 Kitchen staff can email a student the current status of an order. Apply the order-email migration, then set `RESEND_API_KEY` and `NOTIFICATION_FROM_EMAIL` in the backend environment. The sender must be verified by Resend; the API key remains server-side and must never be committed.
 

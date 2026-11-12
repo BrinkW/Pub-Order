@@ -6,7 +6,7 @@ student, so row-level security applies."""
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated, Any, Literal, cast
 from uuid import UUID
 
@@ -167,26 +167,46 @@ def place_order(
     return saved
 
 
+def history_cursor(before: datetime, before_id: UUID | None) -> str | None:
+    """The PostgREST `or` filter for "older than this order", or None for a time-only cutoff.
+
+    Orders are sorted by (created_at, id), newest first, so the next page is everything
+    placed earlier, plus anything placed at the same instant with a smaller id. Without the
+    id, two orders saved in the same microsecond could fall between two pages and be skipped."""
+    if before_id is None:
+        return None
+    if before.tzinfo is None:
+        before = before.replace(tzinfo=timezone.utc)
+    stamp = before.astimezone(timezone.utc).isoformat()
+    # Quoted, because a timestamp contains PostgREST's reserved "." and ":".
+    return f'created_at.lt."{stamp}",and(created_at.eq."{stamp}",id.lt.{before_id})'
+
+
 @router.get("/orders")
 def list_orders(
     user=Depends(get_current_user),
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     limit: Annotated[int, Query(ge=1, le=MAX_ORDER_PAGE)] = MAX_ORDER_PAGE,
     before: datetime | None = None,
+    beforeId: UUID | None = None,  # noqa: N803 (camelCase like the rest of the API)
 ):
     """The signed-in student's orders, newest first, one page at a time (order history, US2).
 
     Row-level security hides everyone else's orders. A page is never longer than
-    MAX_ORDER_PAGE, so one request can't pull a student's whole history at once. Pass the
-    createdAt of the last order you have as `before` to get the next, older page."""
+    MAX_ORDER_PAGE, so one request can't pull a student's whole history at once. To get the
+    next, older page, pass the createdAt and id of the last order you have as `before` and
+    `beforeId`."""
+    if beforeId is not None and before is None:
+        raise HTTPException(422, "beforeId needs before.")
     db = user_client(access_token(credentials))
     try:
         query = db.from_("orders").select(ORDER_COLUMNS)
         if before is not None:
-            query = query.lt("created_at", before.isoformat())
+            cursor = history_cursor(before, beforeId)
+            query = query.or_(cursor) if cursor else query.lt("created_at", before.isoformat())
         rows = cast(
             list[dict[str, Any]],
-            query.order("created_at", desc=True).limit(limit).execute().data,
+            query.order("created_at", desc=True).order("id", desc=True).limit(limit).execute().data,
         )
     except Exception as exc:
         raise HTTPException(503, "Could not load your orders. Please try again.") from exc

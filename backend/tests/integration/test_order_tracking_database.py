@@ -167,9 +167,27 @@ def test_history_pages_back_in_time(client, student, order):
     assert [row["id"] for row in first] == [order["id"]]
 
     older = client.get(
-        "/orders", params={"limit": 100, "before": order["createdAt"]}, headers=headers(student[0]),
+        "/orders", params={"limit": 100, "before": order["createdAt"], "beforeId": order["id"]},
+        headers=headers(student[0]),
     ).json()
 
     newest_shown = datetime.fromisoformat(order["createdAt"])
     assert order["id"] not in [row["id"] for row in older]
-    assert all(datetime.fromisoformat(row["createdAt"]) < newest_shown for row in older)
+    assert all(datetime.fromisoformat(row["createdAt"]) <= newest_shown for row in older)
+
+
+def test_history_paging_keeps_orders_placed_at_the_same_instant(client, admin, student, order):
+    """US2 review: two orders with the same created_at both appear, one page each, through
+    the real PostgREST filter (this also checks the quoted timestamp syntax)."""
+    second = place(client, student[0]).json()
+    try:
+        admin.table("orders").update({"created_at": order["createdAt"]}).eq("id", second["id"]).execute()
+        pair = sorted([order["id"], second["id"]], reverse=True)
+
+        first = client.get("/orders", params={"limit": 1}, headers=headers(student[0])).json()
+        cursor = {"before": first[0]["createdAt"], "beforeId": first[0]["id"]}
+        next_page = client.get("/orders", params={"limit": 1, **cursor}, headers=headers(student[0])).json()
+
+        assert [first[0]["id"], next_page[0]["id"]] == pair
+    finally:
+        admin.table("orders").delete().eq("id", second["id"]).execute()

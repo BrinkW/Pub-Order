@@ -1,6 +1,7 @@
 // Order history (US2, built on Sprint 3's US6 list): every order the signed-in student has
 // placed, newest first, with when it was placed, what was in it, its total and its status.
-// Orders load a page at a time; "Load older orders" asks for the page before the oldest one shown.
+// Orders load a page at a time; "Load older orders" asks for the page before the oldest one
+// shown, by its createdAt and id, so orders placed at the same instant are never skipped.
 import { useEffect, useRef, useState } from 'react';
 import PubHeader from './PubHeader.jsx';
 import { HISTORY_PAGE_SIZE, loadOrders } from './order-api.js';
@@ -42,9 +43,12 @@ export default function MyOrders({ email, onOpenOrder, onBackToMenu, onSignIn })
     olderRequest.current = new AbortController();
     setLoadingOlder(true); setOlderError('');
     try {
-      const result = await loadOrders(olderRequest.current.signal, { limit: HISTORY_PAGE_SIZE, before: oldest.createdAt });
+      const result = await loadOrders(olderRequest.current.signal, {
+        limit: HISTORY_PAGE_SIZE, before: oldest.createdAt, beforeId: oldest.id,
+      });
       if (result.signInRequired) { setState('signIn'); return; }
-      // Skip anything already on screen, in case an order was placed at the same instant.
+      // The server pages by (createdAt, id), so pages don't overlap; this only guards against
+      // showing an order twice if the list changed between requests.
       setOrders((current) => {
         const shown = new Set(current.map((order) => order.id));
         return [...current, ...result.orders.filter((order) => !shown.has(order.id))];

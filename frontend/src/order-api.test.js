@@ -81,8 +81,8 @@ describe('loadOrders', () => {
     expect(fetch.mock.calls[0][0]).toBe('/api/orders?limit=20');
 
     fetch.mockResolvedValueOnce(response([]));
-    await expect(loadOrders(undefined, { limit: 20, before: order.createdAt })).resolves.toEqual({ orders: [] });
-    expect(fetch.mock.calls[1][0]).toBe('/api/orders?limit=20&before=2026-10-19T12%3A00%3A00%2B00%3A00');
+    await expect(loadOrders(undefined, { limit: 20, before: order.createdAt, beforeId: ID })).resolves.toEqual({ orders: [] });
+    expect(fetch.mock.calls[1][0]).toBe(`/api/orders?limit=20&before=2026-10-19T12%3A00%3A00%2B00%3A00&beforeId=${ID}`);
   });
 
   it('lists the student’s orders', async () => {
