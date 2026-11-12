@@ -125,6 +125,27 @@ describe('Placing an order', () => {
     expect(JSON.parse(orderCalls()[1][1].body).idempotencyKey).toBe(firstKey);
   });
 
+  it('explains an order limit and keeps the cart (SEC-03)', async () => {
+    const limit = 'You already have 3 orders in progress. Pick one up or cancel one before ordering again.';
+    orderResponses.push(response({ detail: limit }, 429));
+    const user = await openValidatedReview();
+
+    await user.click(screen.getByRole('button', { name: 'Place order' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(limit);
+    expect(onOrderPlaced).not.toHaveBeenCalled();
+    expect(savedCart().items).toEqual(meal.items);
+  });
+
+  it('falls back to a general limit message when the 429 has no reason', async () => {
+    orderResponses.push(response({}, 429));
+    const user = await openValidatedReview();
+
+    await user.click(screen.getByRole('button', { name: 'Place order' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('You have too many orders right now.');
+  });
+
   it('shows the latest review when the menu changed before ordering, and keeps the cart', async () => {
     orderResponses.push(response({ detail: { message: 'Your meal needs review before ordering.', issues: [] } }, 409));
     reviewResponses.push(response(validReview()), response({
