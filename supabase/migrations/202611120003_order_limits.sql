@@ -1,7 +1,8 @@
 -- SEC-03: limit how many orders one student can place, so a script can't flood the kitchen.
 -- A student can have at most 3 orders in progress (Received, Preparing or Ready) and can
 -- place at most 5 orders in any 10 minutes, cancelled ones included. Retrying an order that
--- was already placed (same idempotency key) still returns it.
+-- was already placed (same idempotency key) still returns it, even when the retry arrives
+-- while the first request is still saving.
 -- The limits live in place_order itself, so they also apply to anyone calling the function
 -- directly with the public key, not only to requests through our API.
 -- Error: errcode PT429 (PostgREST answers it with HTTP 429); the detail says which limit,
@@ -29,6 +30,11 @@ begin
     raise exception 'place_order: missing idempotency key' using errcode = '22023';
   end if;
 
+  -- One student's orders are counted and placed one at a time, so two requests sent together
+  -- can't both slip under a limit. The retry check comes after the lock: a retry sent while
+  -- the first request is still saving waits for it and then returns that order, instead of
+  -- counting it against the limit and getting a 429.
+  perform pg_advisory_xact_lock(hashtextextended('place_order:' || v_user::text, 0));
   select o.id into v_order
   from public.orders o
   where o.user_id = v_user and o.idempotency_key = p_idempotency_key;
@@ -36,9 +42,6 @@ begin
     return v_order;
   end if;
 
-  -- One student's orders are counted and placed one at a time, so two requests sent together
-  -- can't both slip under a limit.
-  perform pg_advisory_xact_lock(hashtextextended('place_order:' || v_user::text, 0));
   if (select count(*) from public.orders o
       where o.user_id = v_user and o.status in ('Received', 'Preparing', 'Ready')) >= c_max_open then
     raise exception 'place_order: too many orders in progress'

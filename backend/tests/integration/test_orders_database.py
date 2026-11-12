@@ -7,6 +7,8 @@ against a local database, so they can never change the team's hosted project.
 from __future__ import annotations
 
 import os
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -240,3 +242,28 @@ def test_a_fourth_order_in_progress_is_refused(client, admin, fresh_student):
     assert place(client, token, first_key).status_code == 201
     stored = admin.table("orders").select("id").eq("user_id", user_id).execute().data
     assert len(stored) == 3
+
+
+def test_retries_sent_together_at_the_limit_return_the_same_order(admin, fresh_student):
+    """SEC-03 review on #38: with 2 orders in progress, the same order sent 4 times at once must
+    save it once and return it to every request. Before the fix, a retry that arrived while
+    the first request was saving counted that order as the third and got a 429."""
+    token, user_id = fresh_student
+    db = user_client(token)
+    meal = [{"id": item["id"], "quantity": 1} for item in FULL_MEAL]
+    for _ in range(2):
+        db.rpc("place_order", {"p_idempotency_key": str(uuid4()), "p_swipes": 1, "p_items": meal}).execute()
+    key = str(uuid4())
+    start = Barrier(4)
+
+    def send():
+        client = user_client(token)
+        start.wait()
+        return client.rpc("place_order", {"p_idempotency_key": key, "p_swipes": 1, "p_items": meal}).execute().data
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        results = list(pool.map(lambda _: send(), range(4)))
+
+    [order] = stored_orders(admin, key)
+    assert results == [order["id"]] * 4
+    assert len(admin.table("orders").select("id").eq("user_id", user_id).execute().data) == 3

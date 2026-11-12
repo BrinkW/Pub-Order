@@ -193,6 +193,7 @@ Marked `integration`. No mocks: orders go through FastAPI, `app/orders.py` and t
 | [`test_student_cannot_insert_an_order_directly`](../backend/tests/integration/test_orders_database.py#L165) | **Failure path:** a student writing to `orders` directly, bypassing the API, is refused. |
 | [`test_database_function_rechecks_the_meal`](../backend/tests/integration/test_orders_database.py#L177) | **Failure path:** the database function itself refuses an incomplete meal (errcode 22023). |
 | [`test_a_fourth_order_in_progress_is_refused`](../backend/tests/integration/test_orders_database.py#L225) | **SEC-03 regression, failure path:** a new student places 3 orders; the 4th gives 429 "3 orders in progress" and stores nothing, while retrying the first order still returns it. Uses its own account, so the shared test user's orders don't count. |
+| [`test_retries_sent_together_at_the_limit_return_the_same_order`](../backend/tests/integration/test_orders_database.py#L247) | **SEC-03 regression, concurrency:** with 2 orders in progress, the same order is sent 4 times at once straight to `place_order`. It is stored once and every request gets it back; none gets a 429 for counting it as the 3rd order. |
 
 ### Integration: order confirmation and pickup tracking: [integration/test_order_tracking_database.py](../backend/tests/integration/test_order_tracking_database.py)
 
