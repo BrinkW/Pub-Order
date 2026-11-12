@@ -73,6 +73,9 @@
 .order-row-main { display: grid; gap: 4px; font-size: 13px; min-width: 0; }
 .order-row-main strong { font-size: 15px; }
 .order-row-meta { color: var(--muted); font-size: 12px; }
+.order-history-note { margin: 10px 0 0; color: var(--muted); font-size: 14px; }
+.order-history-more { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: -12px 0 24px; }
+.order-history-more .order-refresh-error { margin: 0; }
 .order-chip { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; font-weight: 700; padding: 5px 10px; border-radius: 6px; background: #f3e6cc; white-space: nowrap; }
 .order-row-ready { border-color: var(--ink); box-shadow: inset 4px 0 0 var(--gold); }
 .order-row-ready .order-chip { background: var(--ink); color: #f3d48e; }
@@ -98,3 +101,28 @@
 @media (prefers-reduced-motion: reduce) {
   .order-status { transition: none; }
 }
+
+/* US4 order notices: pinned to the corner of every student page. Ready uses the same ink and
+   gold as the Ready status panel, so it reads as the one update not to miss. */
+.order-notices { position: fixed; right: 20px; bottom: 20px; z-index: 40; display: grid; gap: 10px; width: min(360px, calc(100vw - 40px)); }
+.order-notice { background: var(--card); color: var(--ink); border: 1px solid var(--line); border-left: 4px solid var(--gold); border-radius: 12px; padding: 14px 16px 12px; box-shadow: 0 10px 30px #2a1f1222; animation: order-notice-in .25s ease-out; }
+.order-notice-label { margin: 0 0 4px; font-size: 10px; font-weight: 700; letter-spacing: .15em; text-transform: uppercase; color: var(--gold-deep); }
+.order-notice-title { margin: 0; font-family: "Iowan Old Style", Palatino, Georgia, serif; font-size: 19px; font-weight: 500; line-height: 1.2; }
+.order-notice-body { margin: 6px 0 10px; font-size: 13px; color: var(--muted); }
+.order-notice-actions { display: flex; gap: 8px; }
+.order-notice-open, .order-notice-dismiss { font: inherit; font-size: 12px; font-weight: 600; border-radius: 30px; padding: 7px 14px; cursor: pointer; }
+.order-notice-open { background: var(--ink); color: var(--paper); border: 1px solid var(--ink); }
+.order-notice-dismiss { background: transparent; color: inherit; border: 1px solid var(--line); }
+.order-notice-ready { background: var(--ink); color: var(--paper); border-color: var(--ink); border-left-color: var(--gold); }
+.order-notice-ready .order-notice-label { color: #d7b56a; }
+.order-notice-ready .order-notice-title { color: #f3d48e; }
+.order-notice-ready .order-notice-body { color: #e8dfcf; }
+.order-notice-ready .order-notice-open { background: #f3d48e; color: var(--ink); border-color: #f3d48e; }
+.order-notice-ready .order-notice-dismiss { border-color: #ffffff44; }
+@keyframes order-notice-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .order-notice { animation: none; } }
+
+/* Browser alert opt-in on the order page. */
+.order-alerts { margin: 14px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: 12px; }
+.order-alerts p { margin: 0; }
+.order-status-ready .order-alerts { color: #e8dfcf; }

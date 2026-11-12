@@ -32,11 +32,22 @@ export async function loadOrder(orderId, signal) {
   return { order };
 }
 
+// Order history (US2) asks for this many orders at a time.
+export const HISTORY_PAGE_SIZE = 20;
+
 // Returns { orders } (newest first) or { signInRequired }. Throws when the request fails.
-export async function loadOrders(signal) {
+// With no options this is the newest page the server allows (the kitchen board uses that).
+// `limit`, `before` and `beforeId` (the createdAt and id of the oldest order shown) page back
+// through a student's history. The id breaks ties between orders placed at the same instant.
+export async function loadOrders(signal, { limit, before, beforeId } = {}) {
   const token = await accessToken();
   if (!token) return { signInRequired: true };
-  const response = await getJson('/api/orders', token, signal);
+  const query = new URLSearchParams();
+  if (limit) query.set('limit', String(limit));
+  if (before) query.set('before', before);
+  if (before && beforeId) query.set('beforeId', beforeId);
+  const url = query.size ? `/api/orders?${query}` : '/api/orders';
+  const response = await getJson(url, token, signal);
   if (response.status === 401) return { signInRequired: true };
   if (!response.ok) throw new Error(LIST_FAILED);
   const orders = await response.json().catch(() => null);
