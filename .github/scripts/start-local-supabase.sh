@@ -23,7 +23,7 @@ if [ -z "$api_url" ] || [ -z "$anon_key" ] || [ -z "$service_key" ] || [ -z "$db
   exit 1
 fi
 
-email="ci-student@example.com"
+email="ci-student@vanderbilt.edu"
 password="ci-$(openssl rand -hex 12)"
 echo "::add-mask::$password"
 curl --fail-with-body -sS -o /dev/null -X POST "$api_url/auth/v1/admin/users" \
