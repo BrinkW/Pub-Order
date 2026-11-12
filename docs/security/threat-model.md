@@ -1,8 +1,8 @@
 # Threat model -- Pub-Order (Group 5)   (docs/security/threat-model.md)
-Last updated: 2026-11-09 · Authors: Hamayun Raza (diagrammer, STRIDE lead), Brink Wiesedeppe (defender, scribe), Luke Anderson, Ibrahim Boudaoud · Covers: main @ `a41bd7a` (includes the CI security stage from PR #20) + staging: none yet (the app runs locally or from the release artifact, against the hosted Supabase project)
+Last updated: 2026-11-11 · Authors: Hamayun Raza (diagrammer, STRIDE lead), Brink Wiesedeppe (defender, scribe), Luke Anderson, Ibrahim Boudaoud · Covers: main @ `a41bd7a` (includes the CI security stage from PR #20); the DFD also covers the staging deployment (PR #35) and order emails (PR #27) · Staging: https://pub-order.onrender.com (Render deploys `main` after CI passes)
 
 ## 1. Data-flow diagram (DFD)
-Converted from the in-class DFD. Each subgraph is a trust zone; every arrow between zones crosses a trust boundary. Pub-Order has no LLM, payment or email provider, so the only third party is Supabase.
+Converted from the in-class DFD. Each subgraph is a trust zone; every arrow between zones crosses a trust boundary. Pub-Order has no LLM or payment provider. Its third parties are Supabase (sign-in and the database), Render (hosts the staging site: the backend serves the API and the web app over HTTPS) and Resend (sends the kitchen's order-status emails, PR #27).
 
 ```mermaid
 flowchart TB
@@ -11,15 +11,19 @@ flowchart TB
   subgraph Z1["Trust Zone 1: User Browser"]
     web["1.0 Pub Order Web App (React + Vite)"]
   end
-  subgraph Z2["Trust Zone 2: Application Backend"]
-    api["2.0 Process Requests (FastAPI)"]
+  subgraph Z2["Trust Zone 2: Application Backend (hosted on Render, HTTPS)"]
+    api["2.0 Process Requests (FastAPI; also serves the web app and /config.js)"]
   end
   subgraph Z3["Trust Zone 3: Supabase Services"]
     auth["Supabase Authentication"]
     db[("D1: Database - users, menu, orders (row-level security)")]
   end
+  subgraph Z4["Trust Zone 4: Email Provider"]
+    resend["Resend email API"]
+  end
   student -- "login, cart, order details" --> web
   staff -- "login, order updates, menu changes" --> web
+  api -- "web app files + /config.js (public Supabase URL and anon key)" --> web
   web -- "login credentials" --> auth
   auth -- "session / access token" --> web
   web -- "API requests + access token" --> api
@@ -28,6 +32,8 @@ flowchart TB
   api -- "read / write menu and orders, as the signed-in user" --> db
   db -- "menu items and order records" --> api
   web -. "public anon key + access token: direct database calls, bypassing the backend" .-> db
+  api -- "student email, order number, status (server-side API key)" --> resend
+  resend -- "order status email" --> student
 ```
 
 ### Trust boundaries
@@ -38,6 +44,7 @@ flowchart TB
 | React Frontend -> Supabase | Login credentials going in; session and access tokens coming back. The public anon key also lets the browser call the database directly | The user sends the credentials; Supabase handles authentication for us |
 | FastAPI Backend -> Supabase | Token checks (Auth), and menu items, orders and order statuses (database), sent as the signed-in user | Our team controls the backend logic and the database rules (migrations); Supabase hosts both services |
 | Staff Frontend -> Admin Functions | Staff sign-in, order status changes and sold-out changes (`PATCH /orders/{id}`, `PATCH /menu/{id}`) | Staff control what they submit; the backend checks the kitchen role (`require_kitchen`) and the database checks it again (`is_kitchen()`) |
+| FastAPI Backend -> Resend | A student's email address, order number and status, with the Resend API key (`POST /orders/{id}/notification`, kitchen only) | Our team controls what the backend sends and keeps the key server-side; Resend delivers the email |
 
 ## 2. Assets (what an attacker wants)
 | Asset | Where it lives | Why it matters | Impact if lost or changed |
