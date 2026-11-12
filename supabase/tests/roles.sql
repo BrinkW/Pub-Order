@@ -6,15 +6,19 @@ insert into auth.users (id, email) values
   ('00000000-0000-4000-8000-00000000000b', 'order-test-b@example.com'),
   ('00000000-0000-4000-8000-00000000000c', 'kitchen@puborder.test');
 
+-- SEC-01: every sign-up is a student, including the old shared kitchen email.
 do $$
 begin
   if (select role from public.profiles where user_id = '00000000-0000-4000-8000-00000000000a') <> 'student' then
     raise exception 'A normal sign-up must be a student';
   end if;
-  if (select role from public.profiles where user_id = '00000000-0000-4000-8000-00000000000c') <> 'kitchen' then
-    raise exception 'The kitchen test account must be kitchen';
+  if (select role from public.profiles where user_id = '00000000-0000-4000-8000-00000000000c') <> 'student' then
+    raise exception 'SEC-01: registering kitchen@puborder.test must not grant kitchen access';
   end if;
 end $$;
+
+-- Kitchen access is granted only by a deliberate database change, as staff setup does it.
+update public.profiles set role = 'kitchen' where user_id = '00000000-0000-4000-8000-00000000000c';
 
 set local role anon;
 do $$
