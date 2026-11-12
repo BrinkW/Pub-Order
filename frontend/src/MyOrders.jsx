@@ -7,7 +7,7 @@ import PubHeader from './PubHeader.jsx';
 import { HISTORY_PAGE_SIZE, loadOrders } from './order-api.js';
 import { formatPlacedAt, isOpenOrder, shortOrderId, stepLabel, swipeLabel } from './order-status.js';
 
-export default function MyOrders({ email, onOpenOrder, onBackToMenu, onSignIn }) {
+export default function MyOrders({ email, onOpenOrder, onReorder, onBackToMenu, onSignIn }) {
   const [orders, setOrders] = useState([]);
   const [state, setState] = useState('loading');
   const [error, setError] = useState('');
@@ -88,7 +88,7 @@ export default function MyOrders({ email, onOpenOrder, onBackToMenu, onSignIn })
         </div>}
         {state === 'ready' && current.length > 0 && <OrderGroup title="In progress" orders={current} onOpenOrder={onOpenOrder} />}
         {/* Picked up and cancelled orders both land here; each row's chip says which. */}
-        {state === 'ready' && past.length > 0 && <OrderGroup title="Past orders" orders={past} onOpenOrder={onOpenOrder} />}
+        {state === 'ready' && past.length > 0 && <OrderGroup title="Past orders" orders={past} onOpenOrder={onOpenOrder} onReorder={onReorder} />}
         {state === 'ready' && hasOlder && <div className="order-history-more">
           <button className="menu-add" disabled={loadingOlder} onClick={loadOlder}>{loadingOlder ? 'Loading older orders…' : 'Load older orders'}</button>
           {olderError && <p className="order-refresh-error" role="alert">{olderError}</p>}
@@ -99,7 +99,7 @@ export default function MyOrders({ email, onOpenOrder, onBackToMenu, onSignIn })
   );
 }
 
-function OrderGroup({ title, orders, onOpenOrder }) {
+function OrderGroup({ title, orders, onOpenOrder, onReorder }) {
   const id = `orders-${title.toLowerCase().replace(/\s+/g, '-')}`;
   return (
     <section className="order-group" aria-labelledby={id}>
@@ -115,7 +115,10 @@ function OrderGroup({ title, orders, onOpenOrder }) {
             </span>
           </div>
           <span className="order-chip">{stepLabel(order.status)}</span>
-          <button className="menu-add" aria-label={`View order ${shortOrderId(order.id)}`} onClick={() => onOpenOrder(order.id)}>View</button>
+          <div className="order-row-actions">
+            {onReorder && <button className="menu-text-button" aria-label={`Order ${shortOrderId(order.id)} again`} onClick={() => onReorder(order)}>Order again</button>}
+            <button className="menu-add" aria-label={`View order ${shortOrderId(order.id)}`} onClick={() => onOpenOrder(order.id)}>View</button>
+          </div>
         </li>)}
       </ul>
     </section>

@@ -15,7 +15,7 @@ const orderWith = (n, status) => ({
 
 let props;
 function renderList() {
-  props = { email: 'student@vanderbilt.edu', onOpenOrder: vi.fn(), onBackToMenu: vi.fn(), onSignIn: vi.fn() };
+  props = { email: 'student@vanderbilt.edu', onOpenOrder: vi.fn(), onReorder: vi.fn(), onBackToMenu: vi.fn(), onSignIn: vi.fn() };
   return render(<MyOrders {...props} />);
 }
 
@@ -137,5 +137,16 @@ describe('My orders', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Load older orders' }));
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Load older orders' })).not.toBeInTheDocument());
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('offers Order again on past orders only, and hands that order back (US-29)', async () => {
+    renderList();
+
+    const current = await screen.findByRole('region', { name: 'In progress' });
+    expect(within(current).queryByRole('button', { name: /again$/ })).not.toBeInTheDocument();
+    await userEvent.click(within(screen.getByRole('region', { name: 'Past orders' })).getByRole('button', { name: /again$/ }));
+
+    expect(props.onReorder).toHaveBeenCalledTimes(1);
+    expect(props.onReorder.mock.calls[0][0]).toMatchObject({ status: 'Collected' });
   });
 });

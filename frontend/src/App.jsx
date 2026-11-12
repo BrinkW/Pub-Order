@@ -32,6 +32,8 @@ export default function App() {
   // US4: order updates shown in the corner, and the latest one, so an open order page re-reads.
   const [notices, setNotices] = useState([]);
   const [liveUpdate, setLiveUpdate] = useState(null);
+  // US-29: a past order the student asked to order again, handed to the menu.
+  const [reorder, setReorder] = useState(null);
   const [accountChecked, setAccountChecked] = useState(false);
   // The order Checkout just saved, shown at once while the page re-reads it from the server.
   const [placedOrder, setPlacedOrder] = useState(null);
@@ -113,6 +115,11 @@ export default function App() {
     navigate('login');
   }
 
+  const orderAgain = (order) => {
+    setReorder((previous) => ({ key: (previous?.key || 0) + 1, order }));
+    navigate('menu');
+  };
+
   const openOrder = (orderId) => {
     setPlacedOrder(null);
     setNotices((shown) => shown.filter((item) => item.orderId !== orderId));
@@ -126,6 +133,7 @@ export default function App() {
       onBack={() => navigate('login')}
       onViewOrders={() => navigate('orders')}
       onOrderPlaced={(order) => { setPlacedOrder(order); notifications.track(order); navigate({ name: 'order', orderId: order.id }); }}
+      reorder={reorder}
     /></div>
     {page.name === 'order' && <OrderPage
       key={page.orderId}
@@ -136,11 +144,13 @@ export default function App() {
       liveUpdate={liveUpdate}
       onBackToMenu={() => navigate('menu')}
       onViewOrders={() => navigate('orders')}
+      onReorder={orderAgain}
       onSignIn={signInThenReturn}
     />}
     {page.name === 'orders' && <MyOrders
       email={email}
       onOpenOrder={openOrder}
+      onReorder={orderAgain}
       onBackToMenu={() => navigate('menu')}
       onSignIn={signInThenReturn}
     />}
