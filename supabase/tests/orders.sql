@@ -92,6 +92,37 @@ begin
   end;
 end $$;
 
+-- A side is optional: an order has no sides or one per meal swipe. Entrées and drinks are not.
+-- The refused orders come first, while student A still has room under the SEC-03 limit.
+do $$
+declare
+  v_order uuid;
+begin
+  begin
+    perform public.place_order(
+      gen_random_uuid(), 2,
+      '[{"id": "pub-burger", "quantity": 2}, {"id": "straight-cut-fries", "quantity": 1}, {"id": "sweet-tea", "quantity": 2}]'
+    );
+    raise exception 'One side for two meal swipes was accepted';
+  exception when invalid_parameter_value then null;
+  end;
+  begin
+    perform public.place_order(
+      gen_random_uuid(), 1,
+      '[{"id": "straight-cut-fries", "quantity": 1}, {"id": "sweet-tea", "quantity": 1}]'
+    );
+    raise exception 'A meal without an entrée was accepted';
+  exception when invalid_parameter_value then null;
+  end;
+  v_order := public.place_order(
+    '00000000-0000-4000-8000-000000000003', 1,
+    '[{"id": "pub-burger", "quantity": 1}, {"id": "sweet-tea", "quantity": 1}]'
+  );
+  if (select count(*) from public.order_items where order_id = v_order) <> 2 then
+    raise exception 'A meal without a side was not stored';
+  end if;
+end $$;
+
 -- Student B cannot see student A's order.
 select set_config('request.jwt.claims', '{"sub": "00000000-0000-4000-8000-00000000000b", "role": "authenticated"}', true);
 do $$

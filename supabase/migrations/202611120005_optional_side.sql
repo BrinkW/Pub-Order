@@ -1,5 +1,7 @@
--- A meal swipe still needs one entrée and one drink. The side can be left off.
--- Apply in the Supabase SQL editor. Replacing this function does not happen on git push.
+-- A meal swipe still needs one entrée and one drink. The side can be left off: an order has
+-- either no sides or one per meal swipe. Apply after 202611120003_order_limits.sql.
+-- Everything else, including the SEC-03 order limits, is unchanged from that migration.
+-- Safe to run again: the function is replaced.
 
 create or replace function public.place_order(p_idempotency_key uuid, p_swipes integer, p_items jsonb)
 returns uuid
@@ -11,6 +13,9 @@ declare
   v_user uuid := auth.uid();
   v_order uuid;
   v_sides integer;
+  c_max_open constant integer := 3;
+  c_max_recent constant integer := 5;
+  c_recent_window constant interval := interval '10 minutes';
 begin
   if v_user is null then
     raise exception 'place_order: sign in required' using errcode = '42501';
@@ -19,11 +24,27 @@ begin
     raise exception 'place_order: missing idempotency key' using errcode = '22023';
   end if;
 
+  -- One student's orders are counted and placed one at a time, so two requests sent together
+  -- can't both slip under a limit. The retry check comes after the lock: a retry sent while
+  -- the first request is still saving waits for it and then returns that order, instead of
+  -- counting it against the limit and getting a 429.
+  perform pg_advisory_xact_lock(hashtextextended('place_order:' || v_user::text, 0));
   select o.id into v_order
   from public.orders o
   where o.user_id = v_user and o.idempotency_key = p_idempotency_key;
   if found then
     return v_order;
+  end if;
+
+  if (select count(*) from public.orders o
+      where o.user_id = v_user and o.status in ('Received', 'Preparing', 'Ready')) >= c_max_open then
+    raise exception 'place_order: too many orders in progress'
+      using errcode = 'PT429', detail = 'open_orders';
+  end if;
+  if (select count(*) from public.orders o
+      where o.user_id = v_user and o.created_at > now() - c_recent_window) >= c_max_recent then
+    raise exception 'place_order: too many orders placed recently'
+      using errcode = 'PT429', detail = 'recent_orders';
   end if;
 
   if p_swipes is null or p_swipes not between 1 and 10 then
